@@ -8,8 +8,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 
 ## Phase 0 — Tooling (outside repo, not committed)
 
-- [ ] 0.1 Write `~/.claude/rules/jj.md` — prefer jj when `.jj/` exists, keep git as fallback
-- [ ] 0.2 Verify a jj commit works end-to-end (gpg signing is enabled: `signing.behavior = own`)
+- [x] 0.1 Write `~/.claude/rules/jj.md` — prefer jj when `.jj/` exists, keep git as fallback
+- [x] 0.2 Verify a jj commit works end-to-end (gpg signing is enabled: `signing.behavior = own`)
 
 ## Phase 1 — Local Docker dev stack on NC 34
 
@@ -83,7 +83,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 - [ ] 4.15 **Verify**: `test_opds.sh -v` and `test_koreader.sh -v` pass on macOS
 - [ ] 4.16 **Verify**: CSRF-less POST rejected; repeated bad `x-auth-key` throttled
 
-## Phase 5 — Findings deck
+## Phase 5 — Findings deck (done first, on request)
 
-- [ ] 5.1 Build the single-page HTML deck (version-pinned blockers, now-vs-after, security, roadmap)
-- [ ] 5.2 Publish as an Artifact
+- [x] 5.1 Build the single-page HTML deck → `docs/nc34-audit.html`
+- [x] 5.2 Publish as an Artifact — https://claude.ai/code/artifact/a592fb28-185d-4287-8118-ae347e4d579a
+- [ ] 5.3 Refresh the deck once Phase 1 produces real `occ log:tail` fatal output (task 1.14)

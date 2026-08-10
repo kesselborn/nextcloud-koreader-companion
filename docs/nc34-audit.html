@@ -1,0 +1,604 @@
+<title>KOReader Companion — Nextcloud 34 compatibility audit</title>
+<style>
+  :root {
+    --ground:  #eaeff3;
+    --paper:   #ffffff;
+    --sunk:    #dfe6ec;
+    --ink:     #0d161c;
+    --ink-2:   #3a4c57;
+    --ink-3:   #6d808c;
+    --line:    #ccd8e0;
+    --line-2:  #e2eaef;
+    --accent:  #0082c9;
+    --accent-2:#005c8f;
+    --crit:    #b52a45;
+    --crit-bg: #fbe9ec;
+    --warn:    #96600a;
+    --warn-bg: #fbf1de;
+    --ok:      #136b56;
+    --ok-bg:   #e3f3ee;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0a1116; --paper: #121c23; --sunk: #0e171d;
+      --ink: #e7eef3; --ink-2: #a3b5c0; --ink-3: #71858f;
+      --line: #24333c; --line-2: #1b272e;
+      --accent: #3fabe8; --accent-2: #7ac6f2;
+      --crit: #f2798d; --crit-bg: #2d1620;
+      --warn: #dda63f; --warn-bg: #2a2013;
+      --ok: #48c8a0; --ok-bg: #10251f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0a1116; --paper: #121c23; --sunk: #0e171d;
+    --ink: #e7eef3; --ink-2: #a3b5c0; --ink-3: #71858f;
+    --line: #24333c; --line-2: #1b272e;
+    --accent: #3fabe8; --accent-2: #7ac6f2;
+    --crit: #f2798d; --crit-bg: #2d1620;
+    --warn: #dda63f; --warn-bg: #2a2013;
+    --ok: #48c8a0; --ok-bg: #10251f;
+  }
+  :root[data-theme="light"] {
+    --ground: #eaeff3; --paper: #ffffff; --sunk: #dfe6ec;
+    --ink: #0d161c; --ink-2: #3a4c57; --ink-3: #6d808c;
+    --line: #ccd8e0; --line-2: #e2eaef;
+    --accent: #0082c9; --accent-2: #005c8f;
+    --crit: #b52a45; --crit-bg: #fbe9ec;
+    --warn: #96600a; --warn-bg: #fbf1de;
+    --ok: #136b56; --ok-bg: #e3f3ee;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+  .prose { max-width: 68ch; }
+
+  /* ---- masthead ---- */
+  header.mast { padding: 72px 0 40px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 20px;
+  }
+  h1 {
+    font-size: clamp(2rem, 5.2vw, 3.3rem); line-height: 1.05; margin: 0 0 20px;
+    font-weight: 700; letter-spacing: -.025em; text-wrap: balance; max-width: 24ch;
+  }
+  .standfirst { font-size: clamp(1.05rem, 2vw, 1.22rem); color: var(--ink-2); margin: 0; max-width: 62ch; }
+  .standfirst strong { color: var(--ink); font-weight: 650; }
+
+  .verdict {
+    display: flex; flex-wrap: wrap; gap: 0; margin: 40px 0 0;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px; overflow: hidden;
+  }
+  .verdict > div { flex: 1 1 150px; padding: 18px 20px; border-right: 1px solid var(--line-2); }
+  .verdict > div:last-child { border-right: 0; }
+  .verdict dt {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 8px;
+  }
+  .verdict dd {
+    margin: 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .verdict dd small { display: block; font-family: var(--sans); font-size: .78rem; font-weight: 400; color: var(--ink-3); letter-spacing: 0; margin-top: 4px; }
+  .n-crit { color: var(--crit); } .n-warn { color: var(--warn); } .n-ok { color: var(--ok); }
+
+  /* ---- sections ---- */
+  section { padding: 64px 0 0; }
+  h2 {
+    font-size: clamp(1.35rem, 2.6vw, 1.75rem); font-weight: 650; letter-spacing: -.02em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .sec-head { border-top: 1px solid var(--line); padding-top: 18px; margin-bottom: 28px; }
+  .sec-head .eyebrow { margin-bottom: 14px; }
+  .sec-head p { margin: 10px 0 0; color: var(--ink-2); max-width: 68ch; }
+  h3 { font-size: 1.02rem; font-weight: 650; margin: 34px 0 12px; letter-spacing: -.01em; }
+
+  code, .m { font-family: var(--mono); font-size: .855em; }
+  code {
+    background: var(--sunk); padding: .12em .38em; border-radius: 3px;
+    border: 1px solid var(--line-2); white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  /* ---- matrix ---- */
+  .scroller { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: .89rem; }
+  caption { text-align: left; padding: 16px 20px 0; color: var(--ink-3); font-size: .82rem; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 500; border-bottom: 1px solid var(--line); white-space: nowrap;
+    position: sticky; top: 0; background: var(--paper);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  .matrix th[scope="row"] { font-weight: 500; font-family: var(--mono); font-size: .8rem; white-space: nowrap; padding-right: 24px; }
+  .matrix td { text-align: center; padding: 9px 6px; border-left: 1px solid var(--line-2); }
+  .matrix thead th.v { text-align: center; font-size: .78rem; letter-spacing: .04em; }
+  .matrix thead th.v.hi { color: var(--ink); font-weight: 700; }
+
+  .cell { display: block; font-family: var(--mono); font-size: .68rem; letter-spacing: .06em;
+          padding: 5px 2px; border-radius: 2px; font-weight: 600; }
+  .c-ok   { background: var(--ok-bg);   color: var(--ok); }
+  .c-dep  { background: var(--warn-bg); color: var(--warn); }
+  .c-gone { background: var(--crit-bg); color: var(--crit); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 20px; padding: 16px 20px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .sw { width: 22px; height: 12px; border-radius: 2px; display: inline-block; }
+
+  /* ---- findings ---- */
+  .find { border-top: 1px solid var(--line-2); padding: 20px 0; display: grid; gap: 4px 20px;
+          grid-template-columns: 62px 1fr auto; align-items: baseline; }
+  .find:first-of-type { border-top: 1px solid var(--line); }
+  .tag { font-family: var(--mono); font-size: .78rem; font-weight: 700; letter-spacing: .04em; }
+  .tag.crit { color: var(--crit); } .tag.warn { color: var(--warn); }
+  .find .what { font-weight: 600; grid-column: 2; }
+  .find .when {
+    grid-column: 3; font-family: var(--mono); font-size: .72rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--crit); background: var(--crit-bg);
+    padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+  }
+  .find .when.w { color: var(--warn); background: var(--warn-bg); }
+  .find .where { grid-column: 2 / -1; color: var(--ink-2); font-size: .92rem; }
+  .find .where .m { color: var(--ink-3); }
+
+  /* ---- two-col compare ---- */
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 3px; }
+  .cols > div { background: var(--paper); padding: 22px 24px; }
+  .cols h4 { margin: 0 0 4px; font-size: .95rem; font-weight: 650; }
+  .cols .lab { font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
+  .cols ul { margin: 0; padding-left: 1.1em; }
+  .cols li { margin-bottom: 9px; color: var(--ink-2); font-size: .93rem; }
+  .cols li strong { color: var(--ink); font-weight: 600; }
+  .cols li::marker { color: var(--ink-3); }
+
+  /* ---- roadmap ---- */
+  .phase { display: grid; grid-template-columns: 88px 1fr; gap: 0 24px; border-top: 1px solid var(--line-2); padding: 22px 0; }
+  .phase:first-of-type { border-top: 1px solid var(--line); }
+  .phase .pn { font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); padding-top: 3px; }
+  .phase h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 650; }
+  .phase p { margin: 0; color: var(--ink-2); font-size: .93rem; max-width: 66ch; }
+
+  details { border: 1px solid var(--line); border-radius: 3px; background: var(--paper); margin-top: 20px; }
+  summary { cursor: pointer; padding: 14px 20px; font-weight: 600; font-size: .95rem; }
+  details[open] summary { border-bottom: 1px solid var(--line-2); }
+  .details-body { padding: 6px 20px 20px; }
+  .details-body ul { padding-left: 1.1em; margin: 12px 0 0; }
+  .details-body li { color: var(--ink-2); font-size: .92rem; margin-bottom: 8px; }
+
+  footer { margin-top: 72px; border-top: 1px solid var(--line); padding-top: 22px; color: var(--ink-3); font-size: .84rem; }
+  footer p { margin: 0 0 8px; max-width: 76ch; }
+
+  @media (max-width: 620px) {
+    .find { grid-template-columns: 52px 1fr; }
+    .find .when { grid-column: 2; justify-self: start; margin-top: 4px; }
+    .phase { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Compatibility audit &middot; koreader_companion v1.2.4 &middot; 10 Aug 2026</p>
+  <h1>It isn&rsquo;t out of date. It&rsquo;s already broken.</h1>
+  <p class="standfirst">
+    The app declares support for Nextcloud&nbsp;30&ndash;31. The question was what it would take to reach
+    Nextcloud&nbsp;34. The answer is that <strong>four separate hard fatals</strong> land between 33 and 34 &mdash;
+    the library page won&rsquo;t render, the OPDS feed won&rsquo;t serve, and the entire frontend is dead JavaScript.
+    Every version claim below was checked against the tagged Nextcloud sources, not from memory.
+  </p>
+
+  <dl class="verdict">
+    <div><dt>Install on NC 34</dt><dd class="n-crit">Refused<small>info.xml caps at 31</small></dd></div>
+    <div><dt>Hard fatals</dt><dd class="n-crit">6<small>page, feed, JS, toasts</small></dd></div>
+    <div><dt>Security findings</dt><dd class="n-warn">7<small>CSRF, throttling, schema</small></dd></div>
+    <div><dt>jQuery call sites</dt><dd class="n-crit">101<small>jQuery gone since NC 33</small></dd></div>
+    <div><dt>Backend LOC</dt><dd class="n-ok">7.5k<small>largely salvageable</small></dd></div>
+  </dl>
+</header>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">The thesis</p>
+    <h2>Where each dependency died</h2>
+    <p>
+      Every row is something the app actually calls. The columns are Nextcloud releases. This is the whole
+      audit in one grid: the app was written against a platform that has since removed the specific APIs it
+      leans on. Note that <span class="m">getLogger()</span> has been gone since 31 &mdash; the app has been
+      shipping a fatal inside its own error handler for its entire supported range.
+    </p>
+  </div>
+
+  <div class="scroller">
+    <table class="matrix">
+      <caption>Verified by diffing <span class="m">nextcloud/server</span> at tags v30.0.0 &rarr; v34.0.2.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Platform API the app calls</th>
+          <th scope="col" class="v">NC 30</th>
+          <th scope="col" class="v">NC 31</th>
+          <th scope="col" class="v">NC 32</th>
+          <th scope="col" class="v">NC 33</th>
+          <th scope="col" class="v hi">NC 34</th>
+          <th scope="col" class="v">NC 35</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">jQuery <span class="m">$()</span> global</th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-gone">GONE</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">OC.Notification</span></th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">$server-&gt;getConfig()</span></th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">$server-&gt;getUserSession()</span></th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">$server-&gt;getURLGenerator()</span></th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">$server-&gt;getLogger()</span></th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-gone">GONE</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+          <td><span class="cell c-gone">GONE</span></td><td><span class="cell c-gone">GONE</span></td>
+        </tr>
+        <tr>
+          <th scope="row">PHP floor</th>
+          <td><span class="cell c-ok">8.1</span></td><td><span class="cell c-ok">8.1</span></td>
+          <td><span class="cell c-ok">8.1</span></td><td><span class="cell c-dep">8.2</span></td>
+          <td><span class="cell c-dep">8.2</span></td><td><span class="cell c-dep">8.2</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">OC.dialogs.filepicker</span></th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-dep">DEPR</span></td>
+          <td><span class="cell c-dep">DEPR</span></td><td><span class="cell c-dep">DEPR</span></td>
+          <td><span class="cell c-dep">DEPR</span></td><td><span class="cell c-dep">DEPR</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Docblock <span class="m">@NoAdminRequired</span></th>
+          <td><span class="cell c-dep">DEPR</span></td><td><span class="cell c-dep">DEPR</span></td>
+          <td><span class="cell c-dep">DEPR</span></td><td><span class="cell c-dep">DEPR</span></td>
+          <td><span class="cell c-dep">DEPR</span></td><td><span class="cell c-dep">DEPR</span></td>
+        </tr>
+        <tr>
+          <th scope="row"><span class="m">routes.php</span> arrays</th>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+          <td><span class="cell c-ok">OK</span></td><td><span class="cell c-ok">OK</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--ok-bg);border:1px solid var(--ok)"></i> Works</span>
+      <span><i class="sw" style="background:var(--warn-bg);border:1px solid var(--warn)"></i> Deprecated but functional</span>
+      <span><i class="sw" style="background:var(--crit-bg);border:1px solid var(--crit)"></i> Removed &mdash; fatal or dead code</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Blockers</p>
+    <h2>The six things that must change to boot on 34</h2>
+    <p>Each of these is a fatal or a hard refusal, not a warning. Nothing else in the migration matters until they are done.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">F1</span>
+    <span class="what">The library page fatals while rendering</span>
+    <span class="when">Removed in 34.0.0</span>
+    <span class="where">The template reaches into private API for the user&rsquo;s timezone:
+      <span class="m">templates/page.php:139</span> and <span class="m">:165</span> call
+      <span class="m">\OC::$server-&gt;getConfig()</span> and <span class="m">-&gt;getUserSession()</span>.
+      Fires only for books that have sync progress, so an empty library may look fine &mdash; which is how this hides.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">F2</span>
+    <span class="what">The OPDS feed fatals &mdash; no reader can connect</span>
+    <span class="when">Removed in 34.0.0</span>
+    <span class="where">Four calls to <span class="m">\OC::$server-&gt;getURLGenerator()</span> in
+      <span class="m">OpdsController.php:352, 357, 362, 377</span>. <span class="m">IServerContainer</span> went from
+      64 public getters at v31 to 32 at v32 to <strong>three</strong> at v34, and <span class="m">\OC\Server</span> has no
+      <span class="m">__call</span> fallback.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">F3</span>
+    <span class="what">The entire frontend is dead JavaScript</span>
+    <span class="when">Removed in 33.0.0</span>
+    <span class="where">101 jQuery call sites across <span class="m">js/koreader.js</span> (1,363 lines).
+      <span class="m">jquery</span> is present in the server&rsquo;s <span class="m">package.json</span> at v31 and v32 and
+      absent from v33 onward, alongside jQuery UI, Backbone and Handlebars. Nothing interactive survives &mdash;
+      navigation, search, sort, upload, settings.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">F4</span>
+    <span class="what">Every success and error toast is a no-op</span>
+    <span class="when">Removed in 34.0.0</span>
+    <span class="where">26 calls to <span class="m">OC.Notification.showTemporary</span>.
+      <span class="m">core/src/OC/notification.js</span> resolves at v31 through v33 and 404s at v34.0.0.
+      The user gets silence instead of feedback.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">F5</span>
+    <span class="what">The app cannot be installed at all</span>
+    <span class="when">n/a</span>
+    <span class="where"><span class="m">appinfo/info.xml:20</span> declares
+      <span class="m">max-version="31"</span>, so <span class="m">occ app:enable</span> refuses on 32 and up &mdash;
+      and any later core upgrade will auto-disable the app again.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">F6</span>
+    <span class="what">The declared PHP floor is wrong in three directions</span>
+    <span class="when">n/a</span>
+    <span class="where"><span class="m">composer.json</span> says <span class="m">"php": "&gt;=8.0"</span>, but its own
+      dependency <span class="m">kiwilan/php-archive</span> requires <span class="m">^8.1</span>, Nextcloud 33+ requires
+      8.2, and the NC 34 image ships <strong>PHP 8.5</strong>. The release workflow meanwhile pins 8.1.</span>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">What you actually get</p>
+    <h2>Covers, progress, and the UI you haven&rsquo;t seen yet</h2>
+    <p>
+      You asked what this app looks like. Short answer: a dense eleven-column text table, no cover art anywhere,
+      but reading progress genuinely does show up. The cover situation is the interesting one &mdash; the extraction
+      code exists and works, and nothing ever displays it.
+    </p>
+  </div>
+
+  <div class="cols">
+    <div>
+      <p class="lab">Today</p>
+      <h4>Book covers: extracted, then thrown away</h4>
+      <ul>
+        <li><strong>EPUB and CBR covers work.</strong> EPUB parses the OPF <span class="m">&lt;meta name="cover"&gt;</span>,
+          then <span class="m">cover-image</span>, then guesses filenames. CBR takes the first image alphabetically.</li>
+        <li><strong>PDF and MOBI return HTTP 501</strong> &mdash; hardcoded, no rendering at all.</li>
+        <li><strong>Nothing is ever displayed.</strong> There is no <span class="m">&lt;img&gt;</span> in the template and
+          no cover CSS. The only endpoint is <span class="m">/opds/books/{id}/thumb</span>, which is
+          <strong>Basic-auth only</strong> &mdash; unreachable from the logged-in web session. That single fact is why
+          you see no covers.</li>
+        <li>Thumbnails are regenerated on <strong>every single request</strong>, never cached. A
+          <span class="m">cover_image</span> column exists in the database and is never read or written.</li>
+        <li>OPDS advertises a thumbnail link even for PDF, so readers show broken art.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="lab">Proposed</p>
+      <h4>Hand covers to Nextcloud&rsquo;s own preview system</h4>
+      <ul>
+        <li>Register EPUB and CBR as <strong>preview providers</strong>
+          (<span class="m">registerPreviewProvider()</span>, available since NC 23) instead of running a bespoke endpoint.</li>
+        <li>The frontend then just uses <span class="m">/core/preview?fileId=&hellip;</span>. The Basic-auth
+          limitation disappears, and covers get <strong>cached by the platform</strong>.</li>
+        <li><strong>PDF needs no new code.</strong> Core already ships an <span class="m">OC\Preview\PDF</span> provider;
+          it is disabled by default for performance and privacy, so this becomes a documented admin toggle
+          plus a ghostscript install &mdash; which, notably, the official Nextcloud image does not include.</li>
+        <li>Covers start appearing in the Files app for free.</li>
+        <li>Degrade to a placeholder when the provider is off. Never a 500.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Reading progress &mdash; this part already works</h3>
+  <div class="cols">
+    <div>
+      <p class="lab">Shown today</p>
+      <ul>
+        <li>A mini progress bar per row with a rounded percentage, plus the device name truncated to 8 characters.</li>
+        <li>A &ldquo;Last Sync&rdquo; date converted into the user&rsquo;s own Nextcloud timezone, with a full
+          timestamp on hover: <em>&ldquo;42.7% complete on kobo_cla&hellip; (last sync: &hellip;)&rdquo;</em>.</li>
+        <li>Backed by <span class="m">oc_koreader_sync_progress</span> &mdash; note the project&rsquo;s own
+          <span class="m">CLAUDE.md</span> documents this table under the wrong name.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="lab">Missing or broken</p>
+      <ul>
+        <li>The actual reading position is fetched from the database and then <strong>discarded</strong>. No
+          &ldquo;page 123 of 400&rdquo;, no chapter.</li>
+        <li>Only the single most recent device is shown &mdash; no per-device breakdown, no &ldquo;currently reading&rdquo; view.</li>
+        <li>Rows appended by infinite scroll use <strong>different CSS classes and different date formatting</strong>
+          than server-rendered ones, so the table visibly changes character after the first 50 books.</li>
+        <li><strong>An empty library breaks the page.</strong> With no books, the search box and table are never
+          rendered, so the scroll observer gives up and the view cannot recover without a reload.</li>
+        <li>No download link, no read-in-browser, no reset-progress, no bulk select. The only per-book action is
+          &ldquo;edit metadata&rdquo;.</li>
+        <li>Sorting is client-side over whatever rows happen to be in the DOM. The backend supports real sorting;
+          the UI never asks for it.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Independent of any version</p>
+    <h2>Security and correctness</h2>
+    <p>These were not part of the compatibility question, but they are real and worth fixing in the same pass.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">S1</span>
+    <span class="what">The KOReader sync API is an unthrottled credential oracle</span>
+    <span class="when w">Security</span>
+    <span class="where">Sync endpoints are marked public and compare a bare MD5 of the password with no brute-force
+      protection, then call <span class="m">IUserSession::setUser()</span> to fake a login
+      (<span class="m">KoreaderController.php:195, 338</span>). The OPDS controller already injects a throttler &mdash;
+      this one simply doesn&rsquo;t.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">S2</span>
+    <span class="what">Ten state-changing endpoints have CSRF protection switched off</span>
+    <span class="when w">Security</span>
+    <span class="where">Five <span class="m">PageController</span> writers (including upload, delete and
+      set-sync-password) and five <span class="m">SettingsController</span> writers carry
+      <span class="m">@NoCSRFRequired</span> &mdash; while the JavaScript already sends the token. The protection would
+      pass if enabled; disabling it is the entire hole.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">S3</span>
+    <span class="what">The schema cannot be installed on MySQL</span>
+    <span class="when w">Correctness</span>
+    <span class="where"><span class="m">meta_path_idx</span> indexes a 4,000-character column. InnoDB on utf8mb4 caps
+      an index key at 3,072 bytes, so 4,000&nbsp;&times;&nbsp;4 bytes raises
+      <span class="m">ERROR 1071</span>. Reproduces only on MySQL/MariaDB &mdash; testing on Postgres alone will
+      never catch it.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">S4</span>
+    <span class="what">A catch block references a class that does not exist</span>
+    <span class="when w">Correctness</span>
+    <span class="where"><span class="m">OpdsController.php:65</span> catches
+      <span class="m">\OC\Security\Throttle\MaxDelayReached</span>. The real class lives under
+      <span class="m">Bruteforce</span>, not <span class="m">Throttle</span> &mdash; so the catch never matches and a
+      throttled client gets a 500 instead of a 429.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">S5</span>
+    <span class="what">Migrations reach directly into core tables</span>
+    <span class="when w">Correctness</span>
+    <span class="where">Raw <span class="m">SELECT</span>/<span class="m">DELETE</span> against
+      <span class="m">oc_preferences</span>, <span class="m">oc_appconfig</span> and <span class="m">oc_users</span>,
+      which breaks against NC 31+ typed and lazy config. A sixth migration issues
+      <span class="m">DROP TABLE</span> with a hardcoded <span class="m">oc_</span> prefix and MySQL backticks &mdash;
+      a silent no-op on custom prefixes and a syntax error on Postgres.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">S6</span>
+    <span class="what">The navigation entry is registered twice</span>
+    <span class="when w">Hygiene</span>
+    <span class="where">Once in <span class="m">info.xml</span> and again in
+      <span class="m">Application::boot()</span>, both with the same id.</span>
+  </div>
+
+  <details>
+    <summary>Things that look outdated but are actually fine &mdash; don&rsquo;t spend effort here</summary>
+    <div class="details-body">
+      <p>Several plausible-looking concerns turned out to be non-issues on 34, which matters as much as the real findings:</p>
+      <ul>
+        <li><span class="m">OC.dialogs.filepicker</span> and <span class="m">FILEPICKER_TYPE_CHOOSE</span> still exist
+          in v34 as a legacy wrapper. Deprecated since 27.1, not removed. Migrate for hygiene, not urgency.</li>
+        <li>Array-based routes in <span class="m">appinfo/routes.php</span> remain fully supported. Only
+          <span class="m">App::registerRoutes</span> was removed.</li>
+        <li>Docblock annotations such as <span class="m">@NoAdminRequired</span> still function on 34. All 41 controller
+          methods should move to PHP attributes, but that is not what is breaking anything.</li>
+        <li><span class="m">\OC::$server-&gt;get()</span> still works, because
+          <span class="m">IServerContainer</span> extends PSR-11 <span class="m">ContainerInterface</span>.</li>
+        <li><span class="m">\OCP\Util::humanFileSize()</span> survives; it was
+          <span class="m">\OC_Helper::humanFileSize</span> that went in 32.</li>
+        <li><span class="m">IQueryBuilder::execute()</span> was removed in 33 &mdash; and this app has zero call sites.
+          A genuine near-miss.</li>
+        <li><span class="m">smalot/pdfparser</span> is used, just never declared &mdash; it arrives transitively via
+          <span class="m">kiwilan/php-archive</span>. It should be an explicit dependency, but the code is correct.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Sequenced by dependency, not by size</p>
+    <h2>Proposed route to 34/35</h2>
+    <p>
+      Phases 0 and 1 deliberately come first because they do not require the app to work. Provisioning runs entirely
+      through <span class="m">occ</span> and WebDAV, so the dev stack comes up green while the app is thoroughly broken &mdash;
+      giving you somewhere to actually watch the fatals happen.
+    </p>
+  </div>
+
+  <div class="phase">
+    <span class="pn">Phase 0</span>
+    <div><h4>Tooling</h4>
+      <p>Jujutsu instructions for the agent, with git retained as the fallback for non-jj repos. Outside the repo; no code impact.</p></div>
+  </div>
+  <div class="phase">
+    <span class="pn">Phase 1</span>
+    <div><h4>A local stack that actually starts</h4>
+      <p>Pinned <span class="m">nextcloud:34.0.2-apache</span> with PostgreSQL 17 and a healthcheck gate, replacing the
+      current unpinned <span class="m">nextcloud:stable</span> whose only app mount is commented out and points at a dead
+      path. The app bind-mounts into <span class="m">custom_apps/</span> &mdash; the one directory the image&rsquo;s
+      first-boot rsync is guaranteed to leave alone &mdash; so PHP, JS and CSS edits are live with no
+      <span class="m">docker cp</span>. Composer runs in a container, so no host PHP is needed. Seeding goes through
+      WebDAV, because the metadata listeners fire on Nextcloud&rsquo;s write events and
+      <span class="m">occ files:scan</span> does not trigger them. A second profile on NC 31 makes
+      &ldquo;worked before, breaks now&rdquo; a one-command comparison. The macOS test scripts get fixed too: today
+      they need <span class="m">md5sum</span> and GNU <span class="m">grep -P</span>, neither of which exists here.</p></div>
+  </div>
+  <div class="phase">
+    <span class="pn">Phase 2</span>
+    <div><h4>Unblock the backend</h4>
+      <p>Kill F1, F2, F5 and F6; inject the services that were being fetched from the service locator; move all 41
+      controller methods to PHP attributes and <strong>drop the CSRF exemptions while in there</strong>; add
+      brute-force protection to the sync API; replace the deprecated config interface; and fix the migrations. Verified
+      by <span class="m">app:enable</span> succeeding without <span class="m">--force</span> and by running migrations
+      against both Postgres and MySQL.</p></div>
+  </div>
+  <div class="phase">
+    <span class="pn">Phase 3</span>
+    <div><h4>Covers through the preview system</h4>
+      <p>Move EPUB and CBR extraction into registered preview providers, gain PDF from core, delete the bespoke
+      thumbnail path and the unused database column.</p></div>
+  </div>
+  <div class="phase">
+    <span class="pn">Phase 4</span>
+    <div><h4>Vue frontend</h4>
+      <p>Resolves F3 and F4 together, because they are one job. Pinned to exactly the dependency set NC 34.0.2 ships
+      itself &mdash; <span class="m">@nextcloud/vue&nbsp;9.8</span>, <span class="m">vite&nbsp;7</span>,
+      <span class="m">vue&nbsp;3.5</span> &mdash; so there is no version guessing. Moving to initial-state hydration
+      collapses the current render-then-refetch pattern into one path, which incidentally fixes both the
+      empty-library dead-end and the markup divergence after the first scroll page. The library becomes a cover grid,
+      and the backend&rsquo;s existing sort parameter finally gets used.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p><strong>Method.</strong> Version claims were verified by fetching <span class="m">nextcloud/server</span> at
+  tags v30.0.0, v31.0.0, v32.0.0, v33.0.0, v34.0.0 and v34.0.2 and diffing the relevant files &mdash;
+  <span class="m">lib/public/IServerContainer.php</span>, <span class="m">lib/private/Server.php</span>,
+  <span class="m">core/src/OC/*</span> and <span class="m">package.json</span> &mdash; rather than relying on release
+  notes or recollection. Call-site counts come from the working tree at
+  <span class="m">b96d432</span> (v1.2.4). Where the documentation and the source disagreed, the source won; several
+  first-pass conclusions were discarded on that basis and now appear in the &ldquo;actually fine&rdquo; list.</p>
+  <p>Open questions worth deciding before Phase 4: whether the OPDS facet feeds need to keep their current URL shape,
+  and whether MOBI is worth supporting at all given it has neither cover extraction nor a preview provider.</p>
+</footer>
+
+</div>
