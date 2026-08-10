@@ -13,8 +13,14 @@
   <bugs>https://github.com/international-omelette/nextcloud-koreader-companion/issues</bugs>
   <repository type="git">https://github.com/international-omelette/nextcloud-koreader-companion.git</repository>
   <dependencies>
-    <nextcloud min-version="30" max-version="31" />
+    <!-- No max-version on php on purpose: NC 34 already runs on 8.5 and pinning
+         an upper bound would falsely block a future patch release. -->
+    <php min-version="8.2" />
+    <nextcloud min-version="34" max-version="35" />
   </dependencies>
+  <commands>
+    <command>OCA\KoreaderCompanion\Command\GenerateBookHashesCommand</command>
+  </commands>
   <navigations>
     <navigation>
       <name>KOReader</name>

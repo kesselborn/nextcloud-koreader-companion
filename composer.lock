@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "83a6b0864faa9fda686642ac02350e91",
+    "content-hash": "56a1d0d1851dce3ae56d955a18713dad",
     "packages": [
         {
             "name": "kiwilan/php-archive",
@@ -287,8 +287,8 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.0"
+        "php": "^8.2"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

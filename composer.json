@@ -9,8 +9,9 @@
         }
     ],
     "require": {
-        "php": ">=8.0",
-        "kiwilan/php-archive": "^2.0"
+        "php": "^8.2",
+        "kiwilan/php-archive": "^2.0",
+        "smalot/pdfparser": "^2.12"
     },
     "autoload": {
         "psr-4": {
