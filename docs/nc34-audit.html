@@ -432,18 +432,21 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
       </ul>
     </div>
     <div>
-      <p class="lab">Proposed</p>
-      <h4>Hand covers to Nextcloud&rsquo;s own preview system</h4>
+      <p class="lab">Done</p>
+      <h4>Covers now go through Nextcloud&rsquo;s preview system</h4>
       <ul>
-        <li>Register EPUB and CBR as <strong>preview providers</strong>
-          (<span class="m">registerPreviewProvider()</span>, available since NC 23) instead of running a bespoke endpoint.</li>
-        <li>The frontend then just uses <span class="m">/core/preview?fileId=&hellip;</span>. The Basic-auth
-          limitation disappears, and covers get <strong>cached by the platform</strong>.</li>
-        <li><strong>PDF needs no new code.</strong> Core already ships an <span class="m">OC\Preview\PDF</span> provider;
-          it is disabled by default for performance and privacy, so this becomes a documented admin toggle
-          plus a ghostscript install &mdash; which, notably, the official Nextcloud image does not include.</li>
-        <li>Covers start appearing in the Files app for free.</li>
-        <li>Degrade to a placeholder when the provider is off. Never a 500.</li>
+        <li>EPUB and comic archives are registered as <strong>preview providers</strong>
+          (<span class="m">registerPreviewProvider()</span>). 251 lines of bespoke extraction deleted.</li>
+        <li>Covers are served from <span class="m">/core/preview?fileId=&hellip;</span> with ordinary session
+          auth &mdash; the Basic-auth-only limitation that hid them is gone &mdash; and are
+          <strong>cached in <span class="m">oc_previews</span></strong> instead of re-extracted per request.
+          They show in the Files app too.</li>
+        <li><strong>PDF covers turned out to be impossible on 34.0.2</strong>, and not because of config.
+          See below.</li>
+        <li>Two bugs fixed on the way: the comic path took whichever image came <em>first in archive
+          order</em> despite a comment claiming alphabetical (so it could hand back page 34), and the CBR
+          code called a writer API with two non-existent methods &mdash; it could never have worked, which is
+          why nobody noticed <span class="m">unrar</span> was missing from the image.</li>
       </ul>
     </div>
   </div>
@@ -619,6 +622,26 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
       progress is newer than its own</strong> &mdash; conflict resolution collapses to last-writer-wins,
       so a device that has been closed for a week can silently overwrite newer progress. Both now
       returned; found while checking which iOS apps can actually talk to this server.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">R6</span>
+    <span class="what">PDF covers cannot work on 34.0.2, and shouldn&rsquo;t be forced</span>
+    <span class="when">Upstream</span>
+    <span class="where">The plan assumed PDF covers were free: core ships
+      <span class="m">OC\Preview\PDF</span>, so enable it and install ghostscript. That assumption is
+      <strong>wrong on 34.0.2</strong>. This release hard-codes
+      <span class="m">IMagickSupport::hasExtension()</span> and <span class="m">supportsFormat()</span> to
+      <span class="m">return false</span>, disabling <em>every</em> ImageMagick-backed provider. Not present
+      in 34.0.0 &mdash; added in the patch release, deliberately: Nextcloud selected ImageMagick by file
+      <em>extension</em>, so arbitrary content could be routed into a library with a long CVE history
+      (<span class="m">nextcloud/server#62802</span>).
+      Confirmed empirically rather than assumed: ghostscript and imagick both read the fixture PDF fine, yet
+      <span class="m">occ preview:generate</span> still answers &ldquo;No preview generator available for
+      application/pdf&rdquo;.
+      <strong>We could render PDFs with Imagick ourselves and deliberately do not</strong> &mdash; that
+      reintroduces exactly the exposure upstream just closed, in an app whose entire job is ingesting files
+      other people uploaded. PDFs get the generic file icon until upstream re-enables these providers.</span>
   </div>
 
   <details>
