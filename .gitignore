@@ -28,6 +28,9 @@ Thumbs.db
 /build/
 /node_modules/
 
+# Generated sample books for the local dev stack (see dev/seed.sh)
+/dev/fixtures/
+
 # AI development tools
 .claude/settings.local.json
 .playwright-mcp/

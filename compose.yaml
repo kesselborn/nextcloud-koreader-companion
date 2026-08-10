@@ -1,0 +1,124 @@
+# Local development stack for the KOReader Companion Nextcloud app.
+#
+#   make dev      one-shot: boot, install deps, provision, seed sample books
+#   make reset    destroy containers *and* volumes for a clean slate
+#
+# Why /var/www/html is a named volume but the app is a bind mount
+# ---------------------------------------------------------------
+# The official image's entrypoint rsyncs the whole Nextcloud tree from
+# /usr/src/nextcloud into /var/www/html on every boot. That pass runs with
+# --delete and --exclude-from=/upgrade.exclude, and /upgrade.exclude lists
+# /custom_apps/ -- so anything under custom_apps/ is never touched or deleted.
+# A second pass would seed custom_apps/ only if it were missing or empty, and
+# Docker creates our bind-mount target before the entrypoint runs, so that is
+# skipped too.
+#
+# Hence: /var/www/html on a named volume (the image owns it), and the repo
+# bind-mounted at /var/www/html/custom_apps/koreader_companion (we own it).
+# custom_apps is already a writable apps_path in the image's shipped
+# config/apps.config.php, so no extra Nextcloud configuration is needed.
+#
+# Do NOT bind-mount custom_apps/ itself -- only the app subdirectory.
+name: koreader-companion
+
+x-nextcloud-common: &nextcloud-common
+  restart: unless-stopped
+  environment: &nextcloud-env
+    POSTGRES_DB: nextcloud
+    POSTGRES_USER: nextcloud
+    POSTGRES_PASSWORD: nextcloud
+    NEXTCLOUD_ADMIN_USER: admin
+    NEXTCLOUD_ADMIN_PASSWORD: admin
+    OVERWRITEPROTOCOL: http
+    PHP_MEMORY_LIMIT: 512M
+    PHP_UPLOAD_LIMIT: 512M
+  healthcheck:
+    # No curl in the image; php + allow_url_fopen are always there.
+    test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/status.php\") === false ? 1 : 0);'"]
+    interval: 5s
+    timeout: 10s
+    retries: 60
+    start_period: 20s
+
+x-postgres-common: &postgres-common
+  image: postgres:17-alpine
+  restart: unless-stopped
+  environment:
+    POSTGRES_DB: nextcloud
+    POSTGRES_USER: nextcloud
+    POSTGRES_PASSWORD: nextcloud
+    # Throwaway dev database; skip locale generation.
+    POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U nextcloud -d nextcloud"]
+    interval: 3s
+    timeout: 5s
+    retries: 30
+    start_period: 10s
+
+services:
+  db:
+    <<: *postgres-common
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  app:
+    <<: *nextcloud-common
+    image: nextcloud:34.0.2-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      <<: *nextcloud-env
+      POSTGRES_HOST: db
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 host.docker.internal app"
+      OVERWRITEHOST: "localhost:8080"
+      OVERWRITECLIURL: "http://localhost:8080"
+    volumes:
+      - nextcloud_html:/var/www/html
+      # Live reload: edits to lib/, templates/, js/, css/ take effect on the
+      # next request. No rebuild, no docker cp. See dev/php/zz-dev.ini for the
+      # opcache settings that make this immediate.
+      - ./:/var/www/html/custom_apps/koreader_companion:cached
+      # conf.d loads alphabetically, so zz-* overrides the image's own ini files.
+      - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+
+  # ---------------------------------------------------------------------
+  # Optional "worked before / breaks now" stack: Nextcloud 31 on :8081.
+  #   make nc31-up && make nc31-provision
+  # Shares nothing with the NC 34 stack. Starts only when the profile is
+  # requested, so it costs nothing the rest of the time.
+  # ---------------------------------------------------------------------
+  db31:
+    <<: *postgres-common
+    profiles: ["nc31"]
+    volumes:
+      - db31_data:/var/lib/postgresql/data
+
+  app31:
+    <<: *nextcloud-common
+    image: nextcloud:31.0.14-apache
+    profiles: ["nc31"]
+    depends_on:
+      db31:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    environment:
+      <<: *nextcloud-env
+      POSTGRES_HOST: db31
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 host.docker.internal app31"
+      OVERWRITEHOST: "localhost:8081"
+      OVERWRITECLIURL: "http://localhost:8081"
+    volumes:
+      - nextcloud31_html:/var/www/html
+      - ./:/var/www/html/custom_apps/koreader_companion:cached
+      - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+
+volumes:
+  db_data:
+  nextcloud_html:
+  db31_data:
+  nextcloud31_html:
