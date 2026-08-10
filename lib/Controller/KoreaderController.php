@@ -101,11 +101,33 @@ class KoreaderController extends Controller {
             return $this->createKoreaderResponse(['message' => 'Document not found'], 404);
         }
 
+        // Field set matches the reference kosync server
+        // (koreader-sync-server, app/controllers/1/syncs_controller.lua):
+        //   document, percentage, progress, device, device_id, timestamp
+        //
+        // document and timestamp used to be missing here, and both matter:
+        //   - Omitting `document` broke pulls in Readest on iOS against custom
+        //     servers (readest#5065, client-side fix in v0.11.20). Clients that
+        //     key the response by document had nothing to match on.
+        //   - Without `timestamp` a client cannot tell whether the server's
+        //     progress is newer than its own, so conflict resolution degrades to
+        //     "last writer wins" and a stale device can silently clobber.
+        // timestamp is Unix epoch seconds, as in the reference server.
+        $timestamp = 0;
+        if (!empty($progress['updated_at'])) {
+            $timestamp = (int)(new \DateTimeImmutable(
+                $progress['updated_at'],
+                new \DateTimeZone('UTC')
+            ))->format('U');
+        }
+
         return $this->createKoreaderResponse([
+            'document' => $document,
             'progress' => $progress['progress'] ?? '',
             'percentage' => (float)($progress['percentage'] ?? 0.0),
             'device' => $progress['device'] ?? '',
-            'device_id' => $progress['device_id'] ?? ''
+            'device_id' => $progress['device_id'] ?? '',
+            'timestamp' => $timestamp
         ]);
     }
 
