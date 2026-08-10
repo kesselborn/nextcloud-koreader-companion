@@ -136,7 +136,7 @@ script('koreader_companion', 'upload');
                                                     $progressTooltip = number_format($book['progress']['percentage'], 1) . '% complete on ' . $book['progress']['device'];
                                                     if (!empty($book['progress']['updated_at'])) {
                                                         $utcTime = new DateTime($book['progress']['updated_at'], new DateTimeZone('UTC'));
-                                                        $userTimezone = \OC::$server->getConfig()->getUserValue(\OC::$server->getUserSession()->getUser()->getUID(), 'core', 'timezone', date_default_timezone_get());
+                                                        $userTimezone = $_['user_timezone'];
                                                         $userTime = clone $utcTime;
                                                         $userTime->setTimezone(new DateTimeZone($userTimezone));
                                                         $progressTooltip .= ' (last sync: ' . $userTime->format('M j, Y H:i') . ')';
@@ -162,7 +162,7 @@ script('koreader_companion', 'upload');
                                             <?php if (isset($book['progress']) && $book['progress'] && !empty($book['progress']['updated_at'])): ?>
                                                 <?php
                                                     $utcTime = new DateTime($book['progress']['updated_at'], new DateTimeZone('UTC'));
-                                                    $userTimezone = \OC::$server->getConfig()->getUserValue(\OC::$server->getUserSession()->getUser()->getUID(), 'core', 'timezone', date_default_timezone_get());
+                                                    $userTimezone = $_['user_timezone'];
                                                     $userTime = clone $utcTime;
                                                     $userTime->setTimezone(new DateTimeZone($userTimezone));
                                                 ?>

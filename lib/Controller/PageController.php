@@ -97,9 +97,20 @@ class PageController extends Controller {
             $hasKoreaderPassword = !empty($this->config->getUserValue($user->getUID(), 'koreader_companion', 'koreader_sync_password', ''));
         }
 
+        // Resolved here rather than in the template: the template used to reach
+        // for \OC::$server->getConfig()/getUserSession(), both removed in NC 34.
+        $userTimezone = date_default_timezone_get();
+        if ($user) {
+            $configured = $this->config->getUserValue($user->getUID(), 'core', 'timezone', '');
+            if ($configured !== '') {
+                $userTimezone = $configured;
+            }
+        }
+
         return new TemplateResponse($this->appName, 'page', [
             'books' => $books,
             'user_id' => $user ? $user->getUID() : '',
+            'user_timezone' => $userTimezone,
             'connection_info' => [
                 'opds_url' => $opdsUrl,
                 'koreader_sync_url' => $koreaderSyncUrl,
