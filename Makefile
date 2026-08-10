@@ -27,12 +27,14 @@ UID_GID        = $(shell id -u):$(shell id -g)
 KOREADER_PASSWORD ?= test123
 APP_PORT          ?= 8090
 APP31_PORT        ?= 8091
+APPMYSQL_PORT     ?= 8092
 BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .DEFAULT_GOAL := help
 
 .PHONY: help dev up down logs occ shell shell-www reset seed provision test \
-        composer install clean appstore sign release nc31-up nc31-down nc31-provision
+        composer install clean appstore sign release nc31-up nc31-down nc31-provision \
+        mysql-up mysql-down mysql-provision
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -77,7 +79,7 @@ seed: ## Generate sample books and upload them via WebDAV
 	./dev/seed.sh
 
 reset: ## Destroy containers AND volumes, and drop generated fixtures
-	$(DC) --profile nc31 down -v --remove-orphans
+	$(DC) --profile nc31 --profile mysql down -v --remove-orphans
 	rm -rf dev/fixtures
 
 test: ## Run the OPDS and KOReader integration test scripts
@@ -94,6 +96,20 @@ nc31-provision: ## Provision the Nextcloud 31 stack
 
 nc31-down: ## Stop the Nextcloud 31 stack
 	$(DC) --profile nc31 stop app31 db31
+
+# ------------------------------------------------------- MySQL/MariaDB variant
+
+# Some schema problems only appear on MySQL: InnoDB caps an index key at 3072
+# bytes, and backtick quoting is valid there but not on Postgres. Run migrations
+# against both before believing them.
+mysql-up: ## Start the MariaDB-backed NC 34 stack on :$(APPMYSQL_PORT)
+	$(DC) --profile mysql up -d --wait dbmysql appmysql
+
+mysql-provision: ## Provision the MariaDB-backed stack
+	SERVICE=appmysql BASE_URL=http://localhost:$(APPMYSQL_PORT) ./dev/provision.sh
+
+mysql-down: ## Stop the MariaDB-backed stack
+	$(DC) --profile mysql stop appmysql dbmysql
 
 # -------------------------------------------------------------- dependencies
 

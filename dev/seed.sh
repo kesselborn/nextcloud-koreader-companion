@@ -66,13 +66,20 @@ done
 # container, the app is enabled, migrations ran, and the NodeCreatedEvent
 # listener fired with working EPUB/PDF metadata extraction -- none of which
 # involves the app's (currently broken) HTTP layer.
-DB_SERVICE="db"
-[ "$SERVICE" = "app31" ] && DB_SERVICE="db31"
+QUERY='select title, author, language, file_format from oc_koreader_metadata order by id'
 
 say "rows in oc_koreader_metadata (written by the NodeCreatedEvent listener):"
-docker compose exec -T "$DB_SERVICE" psql -qtAX -U nextcloud -d nextcloud \
-  -c 'select count(*) from oc_koreader_metadata;' \
-  || say "(table missing -- did app:enable and the migrations run?)"
-
-docker compose exec -T "$DB_SERVICE" psql -X -U nextcloud -d nextcloud \
-  -c 'select title, author, language, file_format from oc_koreader_metadata order by id;' || true
+case "$SERVICE" in
+  appmysql)
+    docker compose exec -T dbmysql mariadb -unextcloud -pnextcloud nextcloud \
+      -e "select count(*) as rows_found from oc_koreader_metadata; $QUERY;" \
+      || say "(table missing -- did app:enable and the migrations run?)"
+    ;;
+  *)
+    db=db; [ "$SERVICE" = "app31" ] && db=db31
+    docker compose exec -T "$db" psql -qtAX -U nextcloud -d nextcloud \
+      -c 'select count(*) from oc_koreader_metadata;' \
+      || say "(table missing -- did app:enable and the migrations run?)"
+    docker compose exec -T "$db" psql -X -U nextcloud -d nextcloud -c "$QUERY;" || true
+    ;;
+esac
