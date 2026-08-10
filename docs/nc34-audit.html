@@ -147,6 +147,8 @@
     padding: 3px 8px; border-radius: 2px; white-space: nowrap;
   }
   .find .when.w { color: var(--warn); background: var(--warn-bg); }
+  .find .when.o { color: var(--ok); background: var(--ok-bg); }
+  .tag.ok { color: var(--ok); }
   .find .where { grid-column: 2 / -1; color: var(--ink-2); font-size: .92rem; }
   .find .where .m { color: var(--ink-3); }
 
@@ -208,7 +210,7 @@
   <dl class="verdict">
     <div><dt>Install on NC 34</dt><dd class="n-crit">Refused<small>info.xml caps at 31</small></dd></div>
     <div><dt>Hard fatals</dt><dd class="n-crit">6<small>page, feed, JS, toasts</small></dd></div>
-    <div><dt>Security findings</dt><dd class="n-warn">7<small>CSRF, throttling, schema</small></dd></div>
+    <div><dt>Security findings</dt><dd class="n-warn">6<small>CSRF, throttling, schema</small></dd></div>
     <div><dt>jQuery call sites</dt><dd class="n-crit">101<small>jQuery gone since NC 33</small></dd></div>
     <div><dt>Backend LOC</dt><dd class="n-ok">7.5k<small>largely salvageable</small></dd></div>
   </dl>
@@ -505,13 +507,16 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
   </div>
 
   <div class="find">
-    <span class="tag warn">S3</span>
-    <span class="what">The schema cannot be installed on MySQL</span>
-    <span class="when w">Correctness</span>
-    <span class="where"><span class="m">meta_path_idx</span> indexes a 4,000-character column. InnoDB on utf8mb4 caps
-      an index key at 3,072 bytes, so 4,000&nbsp;&times;&nbsp;4 bytes raises
-      <span class="m">ERROR 1071</span>. Reproduces only on MySQL/MariaDB &mdash; testing on Postgres alone will
-      never catch it.</span>
+    <span class="tag ok">S3</span>
+    <span class="what">Retracted: the schema installs fine on MySQL</span>
+    <span class="when o">Disproven</span>
+    <span class="where">This was published as a blocker &mdash; <span class="m">meta_path_idx</span> indexes a
+      4,000-character column, and InnoDB caps an index key at 3,072 bytes, so
+      <span class="m">ERROR 1071</span> looked inevitable. <strong>It does not happen.</strong> Tested on a real
+      MariaDB&nbsp;11 install: the app enables cleanly and MariaDB silently narrows the index to
+      <span class="m">file_path(768)</span>. The residual issue is far milder &mdash; the index covers only the
+      first 768 characters, which is ample for real Nextcloud paths. No fix warranted.
+      <em>Assumed from the byte arithmetic; only running it settled the question.</em></span>
   </div>
 
   <div class="find">
@@ -530,9 +535,12 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
     <span class="when w">Correctness</span>
     <span class="where">Raw <span class="m">SELECT</span>/<span class="m">DELETE</span> against
       <span class="m">oc_preferences</span>, <span class="m">oc_appconfig</span> and <span class="m">oc_users</span>,
-      which breaks against NC 31+ typed and lazy config. A sixth migration issues
-      <span class="m">DROP TABLE</span> with a hardcoded <span class="m">oc_</span> prefix and MySQL backticks &mdash;
-      a silent no-op on custom prefixes and a syntax error on Postgres.</span>
+      which breaks against NC 31+ typed and lazy config. Separately, a migration issued
+      <span class="m">DROP TABLE</span> with a hardcoded <span class="m">oc_</span> prefix and MySQL backticks.
+      <strong>Confirmed on both engines:</strong> Postgres rejects the backticks outright and the table
+      survived on Postgres <em>and</em> MariaDB, so that cleanup had never once run. Five indexes duplicating
+      another index on the same columns were also confirmed on a live MariaDB schema.
+      <strong>Both now fixed</strong> via a declarative <span class="m">ISchemaWrapper</span> migration.</span>
   </div>
 
   <div class="find">
@@ -579,6 +587,22 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
       <em>pull</em> progress and report &ldquo;No progress found for this document&rdquo; (issue&nbsp;#4,
       upstream <span class="m">koreader/koreader#13539</span>). The stale expectation was moved, not the
       header &mdash; the more spec-looking value is the broken one.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">R4</span>
+    <span class="what">A &ldquo;dead&rdquo; autoload line that is load-bearing</span>
+    <span class="when w">Trap</span>
+    <span class="where"><span class="m">Application::__construct()</span> manually requires
+      <span class="m">vendor/autoload.php</span>, which looks redundant because Nextcloud registers an app
+      autoloader. It is not: that autoloader covers the app&rsquo;s own <span class="m">OCA\*</span> namespace,
+      not third-party PSR-4 packages. Removing it makes
+      <span class="m">Kiwilan\Archive\Archive</span> unresolvable, and because the extractor catches
+      <span class="m">Throwable</span>, <strong>EPUB and PDF metadata silently degrade to filename
+      parsing</strong> &mdash; titles become &ldquo;dev-stack-handbook&rdquo; and authors
+      &ldquo;Unknown&rdquo;, with only an info-level log line. Found by removing it, then noticing the
+      extracted metadata differed between the Postgres and MariaDB stacks. Now restored with a comment
+      saying so.</span>
   </div>
 
   <details>
@@ -668,7 +692,11 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
   <span class="m">core/src/OC/*</span> and <span class="m">package.json</span> &mdash; rather than relying on release
   notes or recollection. Call-site counts come from the working tree at
   <span class="m">b96d432</span> (v1.2.4). Where the documentation and the source disagreed, the source won; several
-  first-pass conclusions were discarded on that basis and now appear in the &ldquo;actually fine&rdquo; list.</p>
+  first-pass conclusions were discarded on that basis and now appear in the &ldquo;actually fine&rdquo; list.
+  One finding published in the first version of this page &mdash; S3, &ldquo;the schema cannot be installed on
+  MySQL&rdquo; &mdash; was <strong>retracted after testing it</strong> on a real MariaDB&nbsp;11 install. The byte
+  arithmetic was right and the conclusion was wrong; MariaDB narrows the index instead of refusing it. It is
+  left visible above rather than quietly deleted.</p>
   <p>Open questions worth deciding before Phase 4: whether the OPDS facet feeds need to keep their current URL shape,
   and whether MOBI is worth supporting at all given it has neither cover extraction nor a preview provider.</p>
 </footer>

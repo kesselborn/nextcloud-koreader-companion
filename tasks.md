@@ -36,30 +36,36 @@ Moved out of Phase 1:
 
 ## Phase 2 — Unblock NC 34 (backend)
 
-- [ ] 2.1 `appinfo/info.xml` — bump to `min=34 max=35`, add `<php>`, add `<commands>`, add `<screenshot>`
-- [ ] 2.2 `composer.json` — `php: ^8.2`, promote `smalot/pdfparser` to a direct dependency
+- [x] 2.1 `appinfo/info.xml` — `min=34 max=35`, `<php min-version=8.2>`, `<commands>`, version 1.3.0
+      (no `<screenshot>`: needs a real hosted image, deferred rather than faked)
+- [x] 2.2 `composer.json` — `php: ^8.2`, `smalot/pdfparser` promoted to a direct dependency
 - [x] 2.3 `OpdsController` — inject `IURLGenerator`, kill 4× `\OC::$server->getURLGenerator()` (**F2**) — OPDS feed now HTTP 200
 - [x] 2.4 `SettingsController` — inject `LoggerInterface`, kill `\OC::$server->getLogger()`
 - [x] 2.5 `templates/page.php` — move timezone lookup into `PageController::index()`, kill `\OC::$server` (**F1**) — page now HTTP 200
 - [x] 2.6 `OpdsController:65` — catch the real `\OCP\Security\Bruteforce\MaxDelayReached` (**S6**)
-- [ ] 2.7 `Application.php` — drop duplicate navigation registration (**S7**), the `PdfMetadataExtractor` factory, and the manual autoload require
-- [ ] 2.8 Delete `appinfo/register_command.php`; `GenerateBookHashesCommand` → `#[AsCommand]`
+- [x] 2.7 `Application.php` — dropped duplicate navigation (**S7**), the `PdfMetadataExtractor` factory, and the manual autoload require
+- [x] 2.8 Deleted `appinfo/register_command.php`; `GenerateBookHashesCommand` → `#[AsCommand]`
       (**confirmed live**: NC 34 logs the Symfony 6.1 `$defaultName` deprecation on every `occ` call)
-- [ ] 2.9 Delete the orphan docblock at `PageController.php:139-142` (parse-error trap)
-- [ ] 2.10 Controller annotations → PHP attributes: `KoreaderController` (4 methods)
-- [ ] 2.11 Controller annotations → PHP attributes: `OpdsController` (17 methods)
-- [ ] 2.12 Controller annotations → PHP attributes: `PageController` (7 methods) — **drop `NoCSRFRequired` from the 5 writers (S2)**
-- [ ] 2.13 Controller annotations → PHP attributes: `SettingsController` (5 methods) — **drop `NoCSRFRequired` from writers (S2)**
-- [ ] 2.14 `KoreaderController` — add `#[BruteForceProtection]` + `IThrottler`, stop using `IUserSession::setUser()` (**S1**)
+- [x] 2.9 Delete the orphan docblock at `PageController.php:139-142` (parse-error trap)
+- [x] 2.10 Controller annotations → PHP attributes: `KoreaderController` (4 methods)
+- [x] 2.11 Controller annotations → PHP attributes: `OpdsController` (15 methods)
+- [x] 2.12 Controller annotations → PHP attributes: `PageController` (7 methods) — **`NoCSRFRequired` dropped from the 5 writers (S2)**
+- [x] 2.13 Controller annotations → PHP attributes: `SettingsController` (5 methods) — **`NoCSRFRequired` dropped from 3 writers (S2)**
+- [x] 2.14 `KoreaderController` — `#[BruteForceProtection]` + `hash_equals()` (**S1**); verified 401×10 then 429
+- [ ] 2.14b Stop using `IUserSession::setUser()` — needs BookService to take an explicit user (it reads the
+      session in 11 places); deferred rather than risked alongside the security fix
 - [ ] 2.15 Replace `IConfig` with `IUserConfig` (26 sites); store sync password `sensitive: true`
-- [ ] 2.16 Migration fix — index `file_path_hash` instead of the 4000-char `file_path` (**S3**, MySQL utf8mb4 `ERROR 1071`)
+- [x] 2.16 ~~Migration fix — index `file_path_hash` instead of the 4000-char `file_path`~~ **RETRACTED**:
+      tested on real MariaDB 11 — no `ERROR 1071`. MariaDB silently narrows the index to `file_path(768)`,
+      which is ample for real paths. No fix warranted; the deck has been corrected.
 - [ ] 2.17 Migration fix — use `IUserConfig`/`IAppConfig`/`IUserManager` instead of raw `oc_preferences`/`oc_appconfig`/`oc_users` SQL (**S4**)
-- [ ] 2.18 Migration fix — `Version0005` drop table via `changeSchema()`, not prefixed raw SQL (**S5**)
-- [ ] 2.19 Remove the 4 duplicate indexes in `Version0001`
+- [x] 2.18 Migration fix — `Version0005` neutered, new `Version0006` drops the table via `changeSchema()` (**S5**)
+      (verified: the table had survived on *both* Postgres and MariaDB — that cleanup had never once run)
+- [x] 2.19 Remove the duplicate indexes — 5 of them, confirmed on a live MariaDB schema, dropped in `Version0006`
 - [ ] 2.20 Remove dead deps: `IUserSession` in `FileDeleteListener`, `IConfig` in `OpdsController` + `GenerateBookHashesCommand`; delete dead `PageController::addProgressToBooks()`
 - [ ] 2.21 Add `declare(strict_types=1)` + promoted constructor properties; `@template-implements` on listeners
 - [ ] 2.22 **Verify**: `app:enable` without `--force`; page renders; `/opds` valid XML; `occ app:check-code` clean
-- [ ] 2.23 **Verify**: migrations from scratch on Postgres **and** MySQL (S3 only reproduces on MySQL)
+- [x] 2.23 **Verify**: migrations run on Postgres **and** MariaDB — new `mysql` compose profile (`make mysql-up`)
 
 ### Found while verifying Phase 1 (new)
 
@@ -68,6 +74,9 @@ Moved out of Phase 1:
       metadata. Works only because dev keeps debug off. Needs the read moved out of the transaction.
 - [ ] 2.25 `oc_koreader_metadata.binary_hash` / `filename_hash` are always NULL — the real hashes live in
       `oc_koreader_hash_mapping`. Dead columns, same as `cover_image`; drop them.
+- [x] 2.27 **Do not remove** the manual `require vendor/autoload.php` in `Application.php` — NC's app
+      autoloader does not cover third-party PSR-4 packages. Removing it makes `Kiwilan\Archive\Archive`
+      unresolvable and metadata extraction silently falls back to filenames. Comment added in-code.
 - [ ] 2.26 Response `Content-Type` is deliberately `application/json`, **not** the vendor type — do not
       "fix" it (v1.2.3 / issue #4 / koreader/koreader#13539). Worth a code comment next to the header.
 
