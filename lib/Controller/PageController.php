@@ -125,7 +125,6 @@ class PageController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function setKoreaderPassword() {
         $user = $this->userSession->getUser();
         if (!$user) {
@@ -228,7 +227,6 @@ class PageController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function uploadBook() {
         try {
             // Get the uploaded file
@@ -328,7 +326,6 @@ class PageController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function extractMetadata() {
         try {
             // Get the uploaded file
@@ -365,7 +362,6 @@ class PageController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function updateMetadata($id) {
         try {
             // Try to parse raw input if request params are empty
@@ -462,7 +458,6 @@ class PageController extends Controller {
      * Delete a book from the library
      */
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function deleteBook($id) {
         try {
             // Get the book file by ID

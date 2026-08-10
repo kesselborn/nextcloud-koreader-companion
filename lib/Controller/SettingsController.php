@@ -51,7 +51,6 @@ class SettingsController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function setFolder($folder) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -83,7 +82,6 @@ class SettingsController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function setAutoRename($auto_rename) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -98,7 +96,6 @@ class SettingsController extends Controller {
     }
 
     #[NoAdminRequired]
-    #[NoCSRFRequired]
     public function batchRename($auto_rename) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
