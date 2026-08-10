@@ -54,16 +54,24 @@ Moved out of Phase 1:
 - [x] 2.14 `KoreaderController` — `#[BruteForceProtection]` + `hash_equals()` (**S1**); verified 401×10 then 429
 - [ ] 2.14b Stop using `IUserSession::setUser()` — needs BookService to take an explicit user (it reads the
       session in 11 places); deferred rather than risked alongside the security fix
-- [ ] 2.15 Replace `IConfig` with `IUserConfig` (26 sites); store sync password `sensitive: true`
+- [x] 2.15 Replaced `IConfig` with `IUserConfig` (21 sites, 7 files); sync password written with
+      `FLAG_SENSITIVE`. Note: the sensitive flag is **code-verified only** — the sole write path is a
+      session-authed writer that now requires a CSRF token, and neither Basic auth nor an app password
+      satisfies it (both 412). Needs a browser check in Phase 4.
 - [x] 2.16 ~~Migration fix — index `file_path_hash` instead of the 4000-char `file_path`~~ **RETRACTED**:
       tested on real MariaDB 11 — no `ERROR 1071`. MariaDB silently narrows the index to `file_path(768)`,
       which is ample for real paths. No fix warranted; the deck has been corrected.
-- [ ] 2.17 Migration fix — use `IUserConfig`/`IAppConfig`/`IUserManager` instead of raw `oc_preferences`/`oc_appconfig`/`oc_users` SQL (**S4**)
+- [x] 2.17 Migration fix — `Version0002` and `Version0004` rewritten onto `IUserConfig`/`IAppConfig`/
+      `IUserManager::callForSeenUsers()`; all 9 API methods verified against NC 34 source (**S4**)
 - [x] 2.18 Migration fix — `Version0005` neutered, new `Version0006` drops the table via `changeSchema()` (**S5**)
       (verified: the table had survived on *both* Postgres and MariaDB — that cleanup had never once run)
 - [x] 2.19 Remove the duplicate indexes — 5 of them, confirmed on a live MariaDB schema, dropped in `Version0006`
-- [ ] 2.20 Remove dead deps: `IUserSession` in `FileDeleteListener`, `IConfig` in `OpdsController` + `GenerateBookHashesCommand`; delete dead `PageController::addProgressToBooks()`
-- [ ] 2.21 Add `declare(strict_types=1)` + promoted constructor properties; `@template-implements` on listeners
+- [x] 2.20 Removed dead deps: `IUserSession` in `FileDeleteListener`, `IConfig` in `OpdsController` +
+      `GenerateBookHashesCommand`; deleted `PageController::addProgressToBooks()` (63 lines)
+- [x] 2.21a `@template-implements` added to both listeners; fixed an implicitly-nullable param that
+      PHP 8.4 deprecates (the NC 34 image runs PHP 8.5) — `php -l` across `lib/` is now silent
+- [ ] 2.21b `declare(strict_types=1)` + promoted constructor properties across controllers/services
+      (deferred: broad mechanical change, better done alongside the Phase 4 refactor)
 - [ ] 2.22 **Verify**: `app:enable` without `--force`; page renders; `/opds` valid XML; `occ app:check-code` clean
 - [x] 2.23 **Verify**: migrations run on Postgres **and** MariaDB — new `mysql` compose profile (`make mysql-up`)
 
@@ -77,6 +85,8 @@ Moved out of Phase 1:
 - [x] 2.27 **Do not remove** the manual `require vendor/autoload.php` in `Application.php` — NC's app
       autoloader does not cover third-party PSR-4 packages. Removing it makes `Kiwilan\Archive\Archive`
       unresolvable and metadata extraction silently falls back to filenames. Comment added in-code.
+- [x] 2.28 Sync progress response now returns `document` and `timestamp` to match the reference kosync
+      server — `timestamp` is what lets a client tell whose progress is newer (see deck R5)
 - [ ] 2.26 Response `Content-Type` is deliberately `application/json`, **not** the vendor type — do not
       "fix" it (v1.2.3 / issue #4 / koreader/koreader#13539). Worth a code comment next to the header.
 

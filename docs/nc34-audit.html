@@ -605,6 +605,22 @@ $ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
       saying so.</span>
   </div>
 
+  <div class="find">
+    <span class="tag warn">R5</span>
+    <span class="what">The sync response was missing two fields the reference server sends</span>
+    <span class="when w">Protocol</span>
+    <span class="where"><span class="m">GET /sync/syncs/progress/{document}</span> returned only
+      <span class="m">progress</span>, <span class="m">percentage</span>, <span class="m">device</span> and
+      <span class="m">device_id</span>. The reference kosync server also returns
+      <span class="m">document</span> and <span class="m">timestamp</span>, and both matter:
+      omitting <span class="m">document</span> is precisely what broke pulls in Readest on iOS against
+      custom servers (<span class="m">readest#5065</span>, worked around client-side in v0.11.20), and
+      without <span class="m">timestamp</span> <strong>a client cannot tell whether the server&rsquo;s
+      progress is newer than its own</strong> &mdash; conflict resolution collapses to last-writer-wins,
+      so a device that has been closed for a week can silently overwrite newer progress. Both now
+      returned; found while checking which iOS apps can actually talk to this server.</span>
+  </div>
+
   <details>
     <summary>Things that look outdated but are actually fine &mdash; don&rsquo;t spend effort here</summary>
     <div class="details-body">
