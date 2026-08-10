@@ -1,0 +1,89 @@
+# Nextcloud 34/35 modernization — task list
+
+Plan: `~/.claude/plans/hazy-wiggling-liskov.md`
+
+Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
+
+---
+
+## Phase 0 — Tooling (outside repo, not committed)
+
+- [ ] 0.1 Write `~/.claude/rules/jj.md` — prefer jj when `.jj/` exists, keep git as fallback
+- [ ] 0.2 Verify a jj commit works end-to-end (gpg signing is enabled: `signing.behavior = own`)
+
+## Phase 1 — Local Docker dev stack on NC 34
+
+- [ ] 1.1 Add `.dockerignore` and `dev/` directory for dev-only assets
+- [ ] 1.2 Write `dev/Dockerfile` — `nextcloud:34.0.2-apache` + ghostscript + ImageMagick PDF policy fix
+- [ ] 1.3 Add `dev/opcache-dev.ini` — `validate_timestamps=1`, `revalidate_freq=0` for live reload
+- [ ] 1.4 Replace `docker-compose.yml` with `compose.yaml` — postgres:17 + healthcheck, NC 34, bind-mount into `custom_apps/`
+- [ ] 1.5 Add NC 31 compose profile (reproduce "works on 31 / breaks on 34")
+- [ ] 1.6 Write `dev/provision.sh` — wait for install, composer install, `app:enable --force`, set eBooks folder + sync password
+- [ ] 1.7 Write `dev/seed.sh` — upload sample EPUB/PDF/CBR via **WebDAV** (listeners must fire; a data-dir copy will not do)
+- [ ] 1.8 Rewrite `Makefile` — `dev up down logs occ shell reset seed test watch`; make `install` actually install; fix hardcoded `occ` path in `sign`
+- [ ] 1.9 Fix `test_scripts/test_koreader.sh` for macOS — `md5sum` shim (`md5 -q`)
+- [ ] 1.10 Fix `test_scripts/test_opds.sh` for macOS — replace GNU-only `grep -oP`
+- [ ] 1.11 Clean `test_scripts/reset_and_deploy.sh` — fix `command -v "docker compose"` bug, drop dead `ebooks_poc` refs and the nonexistent `occ ebooks:generate-hashes`
+- [ ] 1.12 Document local dev in `README.md`
+- [ ] 1.13 **Verify**: `make reset && make dev` reaches the login page; bind mount is live (edit CSS, reload, no `docker cp`)
+- [ ] 1.14 **Verify**: capture the actual NC 34 fatals in `occ log:tail` (evidence for the deck), then confirm NC 31 works
+
+## Phase 2 — Unblock NC 34 (backend)
+
+- [ ] 2.1 `appinfo/info.xml` — bump to `min=34 max=35`, add `<php>`, add `<commands>`, add `<screenshot>`
+- [ ] 2.2 `composer.json` — `php: ^8.2`, promote `smalot/pdfparser` to a direct dependency
+- [ ] 2.3 `OpdsController` — inject `IURLGenerator`, kill 4× `\OC::$server->getURLGenerator()` (**F2**)
+- [ ] 2.4 `SettingsController` — inject `LoggerInterface`, kill `\OC::$server->getLogger()`
+- [ ] 2.5 `templates/page.php` — move timezone lookup into `PageController::index()`, kill `\OC::$server` (**F1**)
+- [ ] 2.6 `OpdsController:65` — catch the real `\OCP\Security\Bruteforce\MaxDelayReached` (**S6**)
+- [ ] 2.7 `Application.php` — drop duplicate navigation registration (**S7**), the `PdfMetadataExtractor` factory, and the manual autoload require
+- [ ] 2.8 Delete `appinfo/register_command.php`; `GenerateBookHashesCommand` → `#[AsCommand]`
+- [ ] 2.9 Delete the orphan docblock at `PageController.php:139-142` (parse-error trap)
+- [ ] 2.10 Controller annotations → PHP attributes: `KoreaderController` (4 methods)
+- [ ] 2.11 Controller annotations → PHP attributes: `OpdsController` (17 methods)
+- [ ] 2.12 Controller annotations → PHP attributes: `PageController` (7 methods) — **drop `NoCSRFRequired` from the 5 writers (S2)**
+- [ ] 2.13 Controller annotations → PHP attributes: `SettingsController` (5 methods) — **drop `NoCSRFRequired` from writers (S2)**
+- [ ] 2.14 `KoreaderController` — add `#[BruteForceProtection]` + `IThrottler`, stop using `IUserSession::setUser()` (**S1**)
+- [ ] 2.15 Replace `IConfig` with `IUserConfig` (26 sites); store sync password `sensitive: true`
+- [ ] 2.16 Migration fix — index `file_path_hash` instead of the 4000-char `file_path` (**S3**, MySQL utf8mb4 `ERROR 1071`)
+- [ ] 2.17 Migration fix — use `IUserConfig`/`IAppConfig`/`IUserManager` instead of raw `oc_preferences`/`oc_appconfig`/`oc_users` SQL (**S4**)
+- [ ] 2.18 Migration fix — `Version0005` drop table via `changeSchema()`, not prefixed raw SQL (**S5**)
+- [ ] 2.19 Remove the 4 duplicate indexes in `Version0001`
+- [ ] 2.20 Remove dead deps: `IUserSession` in `FileDeleteListener`, `IConfig` in `OpdsController` + `GenerateBookHashesCommand`; delete dead `PageController::addProgressToBooks()`
+- [ ] 2.21 Add `declare(strict_types=1)` + promoted constructor properties; `@template-implements` on listeners
+- [ ] 2.22 **Verify**: `app:enable` without `--force`; page renders; `/opds` valid XML; `occ app:check-code` clean
+- [ ] 2.23 **Verify**: migrations from scratch on Postgres **and** MySQL (S3 only reproduces on MySQL)
+
+## Phase 3 — Covers via Nextcloud's preview system
+
+- [ ] 3.1 Add `EpubPreviewProvider` (`IProviderV2`) — move logic out of `BookService::getThumbnail()`
+- [ ] 3.2 Add `CbrPreviewProvider` (`IProviderV2`)
+- [ ] 3.3 Register both via `registerPreviewProvider()` in `Application::register()`
+- [ ] 3.4 Document the `OC\Preview\PDF` admin toggle; degrade to a placeholder when off (never 500)
+- [ ] 3.5 Delete the bespoke thumbnail path + unused `cover_image` column + `class_exists` guards
+- [ ] 3.6 Stop advertising an OPDS thumbnail link for formats with no cover
+- [ ] 3.7 **Verify**: EPUB/CBR/PDF each yield `/core/preview?fileId=…`; second hit is cached; PDF-off → placeholder
+
+## Phase 4 — Vue frontend rewrite
+
+- [ ] 4.1 `package.json` + `vite.config.js` pinned to NC 34.0.2's own dep set
+- [ ] 4.2 `PageController::index()` → `IInitialState` + `Util::addScript/addStyle`
+- [ ] 4.3 App shell — `NcContent`/`NcAppNavigation`/`NcAppContent` (replaces the removed snapper + JS hamburger)
+- [ ] 4.4 Library view — cover grid, progress bar, last-sync; fixes the empty-library dead-end
+- [ ] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today)
+- [ ] 4.6 Upload modal → Vue; keep the two-step extract-then-confirm flow
+- [ ] 4.7 Metadata edit/delete modal → Vue; surface series/publisher/description for all formats
+- [ ] 4.8 Settings + Sync + OPDS sections → Vue; `getFilePickerBuilder()` replaces `OC.dialogs.filepicker`
+- [ ] 4.9 Replace 26× `OC.Notification.showTemporary` with `@nextcloud/dialogs` toasts (**F4**)
+- [ ] 4.10 Replace `OC.generateUrl` → `@nextcloud/router`, `OC.requestToken` → `@nextcloud/axios`
+- [ ] 4.11 Delete `js/koreader.js`, `js/upload.js`, and the legacy `templates/page.php` body (**F3**)
+- [ ] 4.12 Add `.php-cs-fixer.dist.php`, `psalm.xml`, `tests/` skeleton
+- [ ] 4.13 Add PR CI workflow with an NC 34/35 matrix (`release.yml` pins PHP 8.1 and only runs on release)
+- [ ] 4.14 **Verify**: full UI walkthrough with console open — zero `$ is not defined` / `OC.Notification`
+- [ ] 4.15 **Verify**: `test_opds.sh -v` and `test_koreader.sh -v` pass on macOS
+- [ ] 4.16 **Verify**: CSRF-less POST rejected; repeated bad `x-auth-key` throttled
+
+## Phase 5 — Findings deck
+
+- [ ] 5.1 Build the single-page HTML deck (version-pinned blockers, now-vs-after, security, roadmap)
+- [ ] 5.2 Publish as an Artifact
