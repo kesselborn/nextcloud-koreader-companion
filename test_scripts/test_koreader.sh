@@ -19,6 +19,18 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Portable MD5 of a string. md5sum is GNU/coreutils and absent on macOS, which
+# has md5 instead; openssl exists on both, so prefer it.
+md5hex() {
+    if command -v openssl >/dev/null 2>&1; then
+        printf '%s' "$1" | openssl dgst -md5 | awk '{print $NF}'
+    elif command -v md5sum >/dev/null 2>&1; then
+        printf '%s' "$1" | md5sum | cut -d' ' -f1
+    else
+        printf '%s' "$1" | md5 -q
+    fi
+}
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -95,7 +107,7 @@ koreader_request() {
     local data=$3
     
     # Use MD5 hash of password for KOReader auth
-    local auth_key=$(echo -n "$KOREADER_PASSWORD" | md5sum | cut -d' ' -f1)
+    local auth_key=$(md5hex "$KOREADER_PASSWORD")
     
     local curl_args=(
         -s
@@ -127,7 +139,7 @@ test_http_status() {
     local data=$3
     local expected_status=$4
     
-    local auth_key=$(echo -n "$KOREADER_PASSWORD" | md5sum | cut -d' ' -f1)
+    local auth_key=$(md5hex "$KOREADER_PASSWORD")
     
     local curl_args=(
         -s
@@ -182,7 +194,7 @@ else
 fi
 
 # Invalid authentication - wrong password
-auth_key_wrong=$(echo -n "wrongpass" | md5sum | cut -d' ' -f1)
+auth_key_wrong=$(md5hex "wrongpass")
 status_code=$(curl -s -w "%{http_code}" -o /dev/null \
     -H "x-auth-user: $USERNAME" \
     -H "x-auth-key: $auth_key_wrong" \
@@ -270,7 +282,7 @@ status_code=$(curl -s -w "%{http_code}" -o /dev/null \
     -X "PUT" \
     -H "Content-Type: application/json" \
     -H "x-auth-user: $USERNAME" \
-    -H "x-auth-key: $(echo -n "$KOREADER_PASSWORD" | md5sum | cut -d' ' -f1)" \
+    -H "x-auth-key: $(md5hex "$KOREADER_PASSWORD")" \
     -d "$TEST_PROGRESS_DATA" \
     "$KOREADER_BASE_URL/sync/syncs/progress")
 
@@ -281,7 +293,7 @@ else
 fi
 
 # Test response content type compliance - Check server returns KOReader content type
-auth_key=$(echo -n "$KOREADER_PASSWORD" | md5sum | cut -d' ' -f1)
+auth_key=$(md5hex "$KOREADER_PASSWORD")
 response_headers=$(curl -s -I \
     -H "x-auth-user: $USERNAME" \
     -H "x-auth-key: $auth_key" \
@@ -301,7 +313,7 @@ endpoints=("/sync/users/auth" "/sync/healthcheck")
 for endpoint in "${endpoints[@]}"; do
     response_headers=$(curl -s -I \
         -H "x-auth-user: $USERNAME" \
-        -H "x-auth-key: $(echo -n "$KOREADER_PASSWORD" | md5sum | cut -d' ' -f1)" \
+        -H "x-auth-key: $(md5hex "$KOREADER_PASSWORD")" \
         "$KOREADER_BASE_URL$endpoint" 2>/dev/null || echo "")
     
     if [[ "$response_headers" == *"application/vnd.koreader.v1+json"* ]]; then
@@ -315,9 +327,9 @@ done
 print_section "Test Summary"
 
 # Check if we can access the web UI
-web_status=$(curl -s -w "%{http_code}" -o /dev/null "$BASE_URL/apps/ebooks_poc/")
+web_status=$(curl -s -w "%{http_code}" -o /dev/null "$BASE_URL/apps/koreader_companion/")
 if [[ "$web_status" == "200" ]]; then
-    print_result "PASS" "Web UI accessible at $BASE_URL/apps/ebooks_poc/"
+    print_result "PASS" "Web UI accessible at $BASE_URL/apps/koreader_companion/"
 else
     print_result "WARN" "Web UI may need authentication" "Status: $web_status"
 fi
@@ -325,8 +337,8 @@ fi
 echo
 print_status "$BLUE" "Testing complete!"
 print_status "$YELLOW" "Next steps:"
-echo "1. Ensure books are indexed with hashes using: php occ ebooks:generate-hashes"
+echo "1. Ensure books are indexed with hashes using: make occ ARGS=koreader:generate-hashes"
 echo "2. Test with real KOReader device using server: $KOREADER_BASE_URL"
-echo "3. Check web UI at: $BASE_URL/apps/ebooks_poc/"
+echo "3. Check web UI at: $BASE_URL/apps/koreader_companion/"
 echo "4. Monitor logs for any issues: docker logs <container-id>"
 echo

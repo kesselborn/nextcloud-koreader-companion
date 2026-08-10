@@ -26,7 +26,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class GenerateBookHashesCommand extends Command {
 
-    protected static $defaultName = 'ebooks:generate-hashes';
+    protected static $defaultName = 'koreader:generate-hashes';
 
     private DocumentHashGenerator $hashGenerator;
     private IDBConnection $db;
@@ -54,7 +54,7 @@ class GenerateBookHashesCommand extends Command {
 
     protected function configure(): void {
         $this
-            ->setName('ebooks:generate-hashes')
+            ->setName('koreader:generate-hashes')
             ->setDescription('Generate hashes for existing books in the database')
             ->setHelp('This command generates binary and filename hashes for all existing books in the koreader_metadata table that do not have hashes yet. This is needed for KOReader sync compatibility.')
             ->addOption(

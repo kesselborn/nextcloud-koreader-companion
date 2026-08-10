@@ -19,6 +19,14 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Portable replacement for `grep -oP '<tag[^>]*>\K[^<]+'`. BSD grep (macOS) has
+# neither -P nor \K, so split the XML onto one tag per line first, then strip
+# the opening tag with sed.
+xml_first_tag_text() {
+    tr '\n' ' ' | sed -e 's/></>\
+</g' | grep -o "<$1[^>]*>[^<]*" | head -1 | sed "s/<$1[^>]*>//"
+}
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -312,7 +320,7 @@ print_section "Book-specific Endpoints"
 response=$(opds_request "GET" "")
 if [[ "$response" == *'<entry>'* ]]; then
     # Extract first book ID from the OPDS feed (this is a simple regex, may need adjustment)
-    book_id=$(echo "$response" | grep -oP 'books/\K[0-9]+' | head -1 || echo "")
+    book_id=$(echo "$response" | grep -o 'books/[0-9][0-9]*' | head -1 | sed 's|books/||' || echo "")
     
     if [[ -n "$book_id" ]]; then
         print_result "PASS" "Found book ID for testing: $book_id"
@@ -353,7 +361,7 @@ print_section "Specific Category Browsing"
 response=$(opds_request "GET" "/authors")
 if [[ "$response" == *'<entry>'* ]]; then
     # Extract first author name (simple regex)
-    author=$(echo "$response" | grep -oP '<title[^>]*>\K[^<]+' | head -1 | sed 's/[^a-zA-Z0-9 ]//g' | sed 's/ /%20/g' || echo "")
+    author=$(echo "$response" | xml_first_tag_text title | sed 's/[^a-zA-Z0-9 ]//g' | sed 's/ /%20/g' || echo "")
     
     if [[ -n "$author" ]]; then
         print_result "PASS" "Found author for testing: $(echo $author | sed 's/%20/ /g')"
