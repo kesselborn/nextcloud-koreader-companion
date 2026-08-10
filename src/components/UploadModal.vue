@@ -45,7 +45,8 @@
 					<NcTextField v-model="form.tags" :label="t('koreader_companion', 'Genre or tags')" />
 				</div>
 
-				<NcProgressBar v-if="uploading" :model-value="percent" size="medium" />
+				<!-- NcProgressBar takes `value`, not `modelValue`. -->
+				<NcProgressBar v-if="uploading" :value="percent" size="medium" />
 
 				<div class="upload__footer">
 					<NcButton :disabled="uploading" @click="skip">

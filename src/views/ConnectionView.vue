@@ -181,6 +181,17 @@ export default {
 		gap: calc(var(--default-grid-baseline) * 2);
 		max-width: 560px;
 		margin-block-end: calc(var(--default-grid-baseline) * 3);
+
+		// The input takes the slack; without this the flex row squeezes the
+		// button until its label truncates ("Change" -> "Cha...").
+		> :first-child {
+			flex: 1 1 auto;
+			min-width: 0;
+		}
+
+		> .button-vue {
+			flex: 0 0 auto;
+		}
 	}
 
 	&__hint {

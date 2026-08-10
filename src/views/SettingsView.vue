@@ -4,10 +4,13 @@
 			:name="t('koreader_companion', 'eBooks folder')"
 			:description="t('koreader_companion', 'Where your library lives. Changing it clears the index and re-scans; reading progress is kept.')">
 			<div class="settings__row">
+				<!-- :model-value, not :value -- v9 renamed the prop to modelValue, and a
+				     :value binding is silently ignored, leaving the field blank.
+				     readonly rather than disabled so the current folder stays legible. -->
 				<NcTextField
-					:value="folder"
+					:model-value="folder"
 					:label="t('koreader_companion', 'Folder')"
-					:disabled="true"
+					:readonly="true"
 					class="settings__folder" />
 				<NcButton @click="pickFolder">
 					<template #icon>
@@ -175,6 +178,10 @@ export default {
 		align-items: end;
 		gap: calc(var(--default-grid-baseline) * 2);
 		flex-wrap: wrap;
+
+		> .button-vue {
+			flex: 0 0 auto;
+		}
 	}
 
 	&__folder {
