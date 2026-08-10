@@ -292,20 +292,26 @@ else
     print_result "WARN" "Request Content-Type strict (requires vnd.koreader.v1+json)" "Status: $status_code"
 fi
 
-# Test response content type compliance - Check server returns KOReader content type
+# Response Content-Type must be application/json, NOT application/vnd.koreader.v1+json.
+#
+# This assertion used to expect the vendor type, which looks more spec-correct but
+# is wrong in practice: real KOReader clients then fail to *pull* progress and
+# report "No progress found for this document". Fixed deliberately in v1.2.3
+# (commit 7b6a2d2) for issue #4, upstream koreader/koreader#13539.
+# Do not "correct" this back to the vendor type.
+#
+# Note the asymmetry, which is intentional: the server ACCEPTS the vendor type on
+# requests (see validateAcceptHeader()) but always RESPONDS with application/json.
 auth_key=$(md5hex "$KOREADER_PASSWORD")
 response_headers=$(curl -s -I \
     -H "x-auth-user: $USERNAME" \
     -H "x-auth-key: $auth_key" \
     "$KOREADER_BASE_URL/sync/healthcheck")
 
-if [[ "$response_headers" == *"application/vnd.koreader.v1+json"* ]]; then
-    print_result "PASS" "Response Content-Type compliance (application/vnd.koreader.v1+json)"
+if [[ "$response_headers" == *"application/json"* ]]; then
+    print_result "PASS" "Response Content-Type is application/json (KOReader pull compatibility)"
 else
-    print_result "FAIL" "Response Content-Type compliance" "Expected: application/vnd.koreader.v1+json"
-    if [[ "$VERBOSE" == true ]]; then
-        echo "  Headers: $response_headers"
-    fi
+    print_result "FAIL" "Response Content-Type" "Expected application/json; got: $(echo "$response_headers" | grep -i content-type)"
 fi
 
 # Test all KOReader endpoints return proper content type
@@ -316,10 +322,10 @@ for endpoint in "${endpoints[@]}"; do
         -H "x-auth-key: $(md5hex "$KOREADER_PASSWORD")" \
         "$KOREADER_BASE_URL$endpoint" 2>/dev/null || echo "")
     
-    if [[ "$response_headers" == *"application/vnd.koreader.v1+json"* ]]; then
+    if [[ "$response_headers" == *"application/json"* ]]; then
         print_result "PASS" "Content-Type for $endpoint"
     else
-        print_result "FAIL" "Content-Type for $endpoint" "Missing KOReader content type"
+        print_result "FAIL" "Content-Type for $endpoint" "Expected application/json"
     fi
 done
 
