@@ -69,13 +69,13 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "${APP_PORT:-8090}:80"
     environment:
       <<: *nextcloud-env
       POSTGRES_HOST: db
       NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 host.docker.internal app"
-      OVERWRITEHOST: "localhost:8080"
-      OVERWRITECLIURL: "http://localhost:8080"
+      OVERWRITEHOST: "localhost:${APP_PORT:-8090}"
+      OVERWRITECLIURL: "http://localhost:${APP_PORT:-8090}"
     volumes:
       - nextcloud_html:/var/www/html
       # Live reload: edits to lib/, templates/, js/, css/ take effect on the
@@ -86,7 +86,7 @@ services:
       - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
 
   # ---------------------------------------------------------------------
-  # Optional "worked before / breaks now" stack: Nextcloud 31 on :8081.
+  # Optional "worked before / breaks now" stack: Nextcloud 31 on :8091.
   #   make nc31-up && make nc31-provision
   # Shares nothing with the NC 34 stack. Starts only when the profile is
   # requested, so it costs nothing the rest of the time.
@@ -105,13 +105,13 @@ services:
       db31:
         condition: service_healthy
     ports:
-      - "8081:80"
+      - "${APP31_PORT:-8091}:80"
     environment:
       <<: *nextcloud-env
       POSTGRES_HOST: db31
       NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 host.docker.internal app31"
-      OVERWRITEHOST: "localhost:8081"
-      OVERWRITECLIURL: "http://localhost:8081"
+      OVERWRITEHOST: "localhost:${APP31_PORT:-8091}"
+      OVERWRITECLIURL: "http://localhost:${APP31_PORT:-8091}"
     volumes:
       - nextcloud31_html:/var/www/html
       - ./:/var/www/html/custom_apps/koreader_companion:cached

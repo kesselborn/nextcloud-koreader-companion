@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 SERVICE="${SERVICE:-app}"
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+BASE_URL="${BASE_URL:-http://localhost:8090}"
 NC_USER="${NC_USER:-admin}"
 NC_PASS="${NC_PASS:-admin}"
 EBOOKS_FOLDER="${EBOOKS_FOLDER:-eBooks}"

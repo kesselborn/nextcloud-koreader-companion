@@ -45,7 +45,7 @@ make dev      # boot Nextcloud 34 + PostgreSQL, install deps, provision, seed sa
 make help     # list every target
 ```
 
-Then open <http://localhost:8080> and log in as `admin` / `admin`. The app is at
+Then open <http://localhost:8090> and log in as `admin` / `admin`. The app is at
 `/apps/koreader_companion/`, the OPDS feed at `/apps/koreader_companion/opds`, and the KOReader sync
 password is `test123`.
 
@@ -84,7 +84,7 @@ would leave the metadata table empty. Drop your own `.epub` / `.pdf` / `.cbr` / 
 To see what the current breakage looks like against a version the app still supports:
 
 ```bash
-make nc31-up && make nc31-provision   # second stack on http://localhost:8081
+make nc31-up && make nc31-provision   # second stack on http://localhost:8091
 ```
 
 ## License

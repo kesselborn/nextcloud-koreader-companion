@@ -25,7 +25,9 @@ UID_GID        = $(shell id -u):$(shell id -g)
 
 # Overridable: make test KOREADER_PASSWORD=hunter2
 KOREADER_PASSWORD ?= test123
-BASE_URL          ?= http://localhost:8080
+APP_PORT          ?= 8090
+APP31_PORT        ?= 8091
+BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .DEFAULT_GOAL := help
 
@@ -84,11 +86,11 @@ test: ## Run the OPDS and KOReader integration test scripts
 
 # ----------------------------------------------------------- NC 31 comparison
 
-nc31-up: ## Start the extra Nextcloud 31 stack on :8081
+nc31-up: ## Start the extra Nextcloud 31 stack on :$(APP31_PORT)
 	$(DC) --profile nc31 up -d --wait
 
 nc31-provision: ## Provision the Nextcloud 31 stack
-	SERVICE=app31 BASE_URL=http://localhost:8081 ./dev/provision.sh
+	SERVICE=app31 BASE_URL=http://localhost:$(APP31_PORT) ./dev/provision.sh
 
 nc31-down: ## Stop the Nextcloud 31 stack
 	$(DC) --profile nc31 stop app31 db31

@@ -14,7 +14,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 APP_ID="${APP_ID:-koreader_companion}"
 SERVICE="${SERVICE:-app}"
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+BASE_URL="${BASE_URL:-http://localhost:8090}"
 NC_USER="${NC_USER:-admin}"
 NC_PASS="${NC_PASS:-admin}"
 EBOOKS_FOLDER="${EBOOKS_FOLDER:-eBooks}"
@@ -41,9 +41,15 @@ occ status
 
 # ---------------------------------------------------------------- 2. dev config
 say "applying dev-only system config"
-# Verbose exception pages with stack traces. Needed: this app fatals on NC 34
-# and a blank 500 page is useless.
-occ config:system:set debug    --value=true --type=boolean
+# NOTE: debug must stay FALSE. With debug=true, Nextcloud enables its "dirty
+# table reads" assertion, and the app's NodeCreatedEvent listener reads
+# oc_filecache inside the same transaction the upload just wrote to. That throws
+# during every WebDAV PUT and metadata extraction silently produces nothing --
+# oc_koreader_metadata stays empty. The underlying app issue is worth fixing
+# (see tasks.md), but until then debug=true makes the app look far more broken
+# than it is. loglevel=0 plus display_errors in dev/php/zz-dev.ini already give
+# full traces without it.
+occ config:system:set debug    --value=false --type=boolean
 occ config:system:set loglevel --value=0
 # Route the Nextcloud log to the Apache error log => visible in `make logs`.
 occ config:system:set log_type --value=errorlog
