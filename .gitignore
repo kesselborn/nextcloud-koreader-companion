@@ -36,3 +36,8 @@ Thumbs.db
 .playwright-mcp/
 
 certificates
+# Vite build output: the bundles are committed (Nextcloud apps ship built JS and
+# the app store tarball has no build step), but sourcemaps are not -- they are
+# ~8 MB and regenerate from `npm run build`.
+/js/*.map
+/css/*.map

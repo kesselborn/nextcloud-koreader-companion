@@ -8,6 +8,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\AppFramework\Services\IInitialState;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http;
@@ -17,6 +18,7 @@ use OCP\Config\IUserConfig;
 use OCP\IUserSession;
 use OCP\IURLGenerator;
 use OCP\IDBConnection;
+use OCP\Util;
 use Psr\Log\LoggerInterface;
 
 class PageController extends Controller {
@@ -30,6 +32,7 @@ class PageController extends Controller {
     private $hashGenerator;
     private $filenameService;
     private LoggerInterface $logger;
+    private IInitialState $initialState;
 
     public function __construct(
         IRequest $request,
@@ -42,6 +45,7 @@ class PageController extends Controller {
         IDBConnection $db,
         IRootFolder $rootFolder,
         DocumentHashGenerator $hashGenerator,
+        IInitialState $initialState,
         LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
@@ -58,6 +62,7 @@ class PageController extends Controller {
         $this->db = $db;
         $this->rootFolder = $rootFolder;
         $this->hashGenerator = $hashGenerator;
+        $this->initialState = $initialState;
         $this->logger = $logger;
     }
 
@@ -85,43 +90,35 @@ class PageController extends Controller {
             return new JSONResponse($books);
         }
 
-        // Initial page load: perform metadata update to ensure fresh data
-        $books = $this->bookService->getBooks($page, $perPage, 'title', false);
+        // Trigger a metadata refresh, but do not embed the books in the HTML.
+        // The old template rendered 50 books server-side and then immediately
+        // re-fetched them over AJAX with different markup; the Vue app fetches
+        // once through one code path.
+        $this->bookService->ensureMetadataUpToDate($user ? $user->getUID() : '');
 
         $baseUrl = $this->urlGenerator->getAbsoluteURL($this->urlGenerator->getWebroot());
-        $opdsUrl = $baseUrl . 'apps/koreader_companion/opds';
-        $koreaderSyncUrl = $baseUrl . 'apps/koreader_companion/sync';
 
         $hasKoreaderPassword = false;
         if ($user) {
-            $hasKoreaderPassword = !empty($this->config->getValueString($user->getUID(), 'koreader_companion', 'koreader_sync_password', ''));
+            $hasKoreaderPassword = !empty($this->config->getValueString(
+                $user->getUID(),
+                'koreader_companion',
+                'koreader_sync_password',
+                ''
+            ));
         }
 
-        // Resolved here rather than in the template: the template used to reach
-        // for \OC::$server->getConfig()/getUserSession(), both removed in NC 34.
-        $userTimezone = date_default_timezone_get();
-        if ($user) {
-            $configured = $this->config->getValueString($user->getUID(), 'core', 'timezone', '');
-            if ($configured !== '') {
-                $userTimezone = $configured;
-            }
-        }
-
-        return new TemplateResponse($this->appName, 'page', [
-            'books' => $books,
-            'user_id' => $user ? $user->getUID() : '',
-            'user_timezone' => $userTimezone,
-            'connection_info' => [
-                'opds_url' => $opdsUrl,
-                'koreader_sync_url' => $koreaderSyncUrl,
-                'username' => $user ? $user->getUID() : '',
-                'has_koreader_password' => $hasKoreaderPassword
-            ],
-            'pagination' => [
-                'current_page' => $page,
-                'per_page' => $perPage
-            ]
+        $this->initialState->provideInitialState('connection', [
+            'opds_url' => $baseUrl . 'apps/koreader_companion/opds',
+            'koreader_sync_url' => $baseUrl . 'apps/koreader_companion/sync',
+            'username' => $user ? $user->getUID() : '',
+            'has_koreader_password' => $hasKoreaderPassword,
         ]);
+
+        Util::addScript($this->appName, 'koreader_companion-main');
+        Util::addStyle($this->appName, 'koreader_companion-main');
+
+        return new TemplateResponse($this->appName, 'page');
     }
 
     #[NoAdminRequired]
