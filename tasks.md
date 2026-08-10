@@ -13,20 +13,23 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 
 ## Phase 1 — Local Docker dev stack on NC 34
 
-- [ ] 1.1 Add `.dockerignore` and `dev/` directory for dev-only assets
-- [ ] 1.2 Write `dev/Dockerfile` — `nextcloud:34.0.2-apache` + ghostscript + ImageMagick PDF policy fix
-- [ ] 1.3 Add `dev/opcache-dev.ini` — `validate_timestamps=1`, `revalidate_freq=0` for live reload
-- [ ] 1.4 Replace `docker-compose.yml` with `compose.yaml` — postgres:17 + healthcheck, NC 34, bind-mount into `custom_apps/`
-- [ ] 1.5 Add NC 31 compose profile (reproduce "works on 31 / breaks on 34")
-- [ ] 1.6 Write `dev/provision.sh` — wait for install, composer install, `app:enable --force`, set eBooks folder + sync password
-- [ ] 1.7 Write `dev/seed.sh` — upload sample EPUB/PDF/CBR via **WebDAV** (listeners must fire; a data-dir copy will not do)
-- [ ] 1.8 Rewrite `Makefile` — `dev up down logs occ shell reset seed test watch`; make `install` actually install; fix hardcoded `occ` path in `sign`
-- [ ] 1.9 Fix `test_scripts/test_koreader.sh` for macOS — `md5sum` shim (`md5 -q`)
-- [ ] 1.10 Fix `test_scripts/test_opds.sh` for macOS — replace GNU-only `grep -oP`
-- [ ] 1.11 Clean `test_scripts/reset_and_deploy.sh` — fix `command -v "docker compose"` bug, drop dead `ebooks_poc` refs and the nonexistent `occ ebooks:generate-hashes`
+- [x] 1.1 Add `dev/` directory for dev-only assets; gitignore `dev/fixtures/`
+- [x] 1.3 Add `dev/php/zz-dev.ini` — `validate_timestamps=1`, `revalidate_freq=0` for live reload, plus visible errors
+- [x] 1.4 Replace `docker-compose.yml` with `compose.yaml` — postgres:17 + healthcheck, NC 34.0.2, bind-mount into `custom_apps/`
+- [x] 1.5 Add NC 31 compose profile on :8081 (reproduce "works on 31 / breaks on 34")
+- [x] 1.6 Write `dev/provision.sh` — wait for install, composer install, `app:enable --force`, set eBooks folder + sync password
+- [x] 1.7 Write `dev/seed.sh` + `dev/make-fixtures.php` — generate and upload sample EPUB/PDF via **WebDAV** (listeners must fire; a data-dir copy will not do)
+- [x] 1.8 Rewrite `Makefile` — `dev up down logs occ shell reset seed test`; make `install` actually install; fix hardcoded `occ` path in `sign`
+- [x] 1.9 Fix `test_scripts/test_koreader.sh` for macOS — `md5hex` helper (verified: `md5hex test123` → `cc03e747…`)
+- [x] 1.10 Fix `test_scripts/test_opds.sh` for macOS — replace GNU-only `grep -oP`
+- [x] 1.11 Retire `test_scripts/reset_and_deploy.sh` — copy-in deploy is obsolete; drop dead `ebooks_poc` refs; rename command to `koreader:generate-hashes`
 - [ ] 1.12 Document local dev in `README.md`
-- [ ] 1.13 **Verify**: `make reset && make dev` reaches the login page; bind mount is live (edit CSS, reload, no `docker cp`)
-- [ ] 1.14 **Verify**: capture the actual NC 34 fatals in `occ log:tail` (evidence for the deck), then confirm NC 31 works
+- [ ] 1.13 **Verify**: `make dev` reaches the login page; bind mount is live (edit CSS, reload, no `docker cp`)
+- [ ] 1.14 **Verify**: capture the actual NC 34 fatals in the log (evidence for the deck), then confirm NC 31 works
+
+Moved out of Phase 1:
+- 1.2 `dev/Dockerfile` with ghostscript + ImageMagick PDF policy → **Phase 3** (only PDF covers need it;
+  the plain image is enough to boot and to reproduce every current failure)
 
 ## Phase 2 — Unblock NC 34 (backend)
 
@@ -71,6 +74,9 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 - [ ] 4.3 App shell — `NcContent`/`NcAppNavigation`/`NcAppContent` (replaces the removed snapper + JS hamburger)
 - [ ] 4.4 Library view — cover grid, progress bar, last-sync; fixes the empty-library dead-end
 - [ ] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today)
+- [ ] 4.5b Extract EPUB series from `calibre:series` — found during Phase 1: `parseEpubOPF()` reads
+      title/author/language/publisher/subject/date/identifier but **not** series, so the `series` column
+      and the OPDS series facet are always empty for EPUB (only CBR sets series)
 - [ ] 4.6 Upload modal → Vue; keep the two-step extract-then-confirm flow
 - [ ] 4.7 Metadata edit/delete modal → Vue; surface series/publisher/description for all formats
 - [ ] 4.8 Settings + Sync + OPDS sections → Vue; `getFilePickerBuilder()` replaces `OC.dialogs.filepicker`
