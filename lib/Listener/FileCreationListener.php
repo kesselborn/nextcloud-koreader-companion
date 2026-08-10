@@ -6,7 +6,7 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeCreatedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 
 class FileCreationListener implements IEventListener {
 
@@ -15,7 +15,7 @@ class FileCreationListener implements IEventListener {
 
     public function __construct(
         BookService $bookService,
-        IConfig $config
+        IUserConfig $config
     ) {
         $this->bookService = $bookService;
         $this->config = $config;
@@ -53,7 +53,7 @@ class FileCreationListener implements IEventListener {
             return false;
         }
 
-        $folderName = $this->config->getUserValue($userId, 'koreader_companion', 'folder', 'eBooks');
+        $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
 
         if (strpos($path, "/files/$folderName/") === false) {
             return false;

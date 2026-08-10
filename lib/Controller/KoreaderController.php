@@ -13,7 +13,7 @@ use OCP\IRequest;
 use OCP\IDBConnection;
 use OCP\IUserSession;
 use OCP\IUserManager;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 
@@ -34,7 +34,7 @@ class KoreaderController extends Controller {
         IDBConnection $db, 
         IUserSession $userSession, 
         IUserManager $userManager, 
-        IConfig $config,
+        IUserConfig $config,
         DocumentHashGenerator $hashGenerator,
         BookService $bookService,
         IRootFolder $rootFolder,
@@ -197,7 +197,7 @@ class KoreaderController extends Controller {
         }
 
         // Get user's stored KOReader sync password MD5 hash
-        $storedMd5Hash = $this->config->getUserValue($authUser, 'koreader_companion', 'koreader_sync_password', '');
+        $storedMd5Hash = $this->config->getValueString($authUser, 'koreader_companion', 'koreader_sync_password', '');
 
         if (empty($storedMd5Hash)) {
             return false; // No sync password set for this user

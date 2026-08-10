@@ -5,7 +5,7 @@ use OCA\KoreaderCompanion\Service\BookService;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeDeletedEvent;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IUserSession;
 use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
@@ -22,7 +22,7 @@ class FileDeleteListener implements IEventListener {
     private LoggerInterface $logger;
 
     public function __construct(
-        IConfig $config,
+        IUserConfig $config,
         IUserSession $userSession,
         IDBConnection $db,
         LoggerInterface $logger
@@ -66,7 +66,7 @@ class FileDeleteListener implements IEventListener {
             return false;
         }
 
-        $folderName = $this->config->getUserValue($userId, 'koreader_companion', 'folder', 'eBooks');
+        $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
 
         // Check if file is in the configured eBooks folder
         if (strpos($path, "/files/$folderName/") === false) {

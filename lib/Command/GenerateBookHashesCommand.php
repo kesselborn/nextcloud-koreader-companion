@@ -7,7 +7,6 @@ namespace OCA\KoreaderCompanion\Command;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IRootFolder;
-use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
@@ -34,7 +33,6 @@ class GenerateBookHashesCommand extends Command {
     private DocumentHashGenerator $hashGenerator;
     private IDBConnection $db;
     private IRootFolder $rootFolder;
-    private IConfig $config;
     private IUserManager $userManager;
     private LoggerInterface $logger;
 
@@ -42,7 +40,6 @@ class GenerateBookHashesCommand extends Command {
         DocumentHashGenerator $hashGenerator,
         IDBConnection $db,
         IRootFolder $rootFolder,
-        IConfig $config,
         IUserManager $userManager,
         LoggerInterface $logger
     ) {
@@ -50,7 +47,6 @@ class GenerateBookHashesCommand extends Command {
         $this->hashGenerator = $hashGenerator;
         $this->db = $db;
         $this->rootFolder = $rootFolder;
-        $this->config = $config;
         $this->userManager = $userManager;
         $this->logger = $logger;
     }

@@ -7,7 +7,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\IDBConnection;
@@ -24,7 +24,7 @@ class SettingsController extends Controller {
     private $filenameService;
     private $logger;
 
-    public function __construct(IRequest $request, IConfig $config, IUserSession $userSession, IDBConnection $db, BookService $bookService, IRootFolder $rootFolder, FilenameService $filenameService, LoggerInterface $logger, $appName) {
+    public function __construct(IRequest $request, IUserConfig $config, IUserSession $userSession, IDBConnection $db, BookService $bookService, IRootFolder $rootFolder, FilenameService $filenameService, LoggerInterface $logger, $appName) {
         parent::__construct($appName, $request);
         $this->config = $config;
         $this->userSession = $userSession;
@@ -58,13 +58,13 @@ class SettingsController extends Controller {
         }
 
         $userId = $user->getUID();
-        $currentFolder = $this->config->getUserValue($userId, $this->appName, 'folder', 'eBooks');
+        $currentFolder = $this->config->getValueString($userId, $this->appName, 'folder', 'eBooks');
 
         // Check if folder is actually changing
         $isFolderChanging = ($currentFolder !== $folder);
 
         // Set the new folder
-        $this->config->setUserValue($userId, $this->appName, 'folder', $folder);
+        $this->config->setValueString($userId, $this->appName, 'folder', $folder);
 
         // Automatically clear library metadata when folder changes
         if ($isFolderChanging) {
@@ -91,7 +91,7 @@ class SettingsController extends Controller {
         // Ensure we have a valid string value ('yes' or 'no')
         $value = ($auto_rename === 'yes') ? 'yes' : 'no';
 
-        $this->config->setUserValue($user->getUID(), $this->appName, 'auto_rename', $value);
+        $this->config->setValueString($user->getUID(), $this->appName, 'auto_rename', $value);
         return new JSONResponse([]);
     }
 
@@ -106,11 +106,11 @@ class SettingsController extends Controller {
 
         try {
             // First, enable auto-rename setting
-            $this->config->setUserValue($userId, $this->appName, 'auto_rename', $auto_rename);
+            $this->config->setValueString($userId, $this->appName, 'auto_rename', $auto_rename);
 
             // Get user's eBooks folder
             $userFolder = $this->rootFolder->getUserFolder($userId);
-            $folderName = $this->config->getUserValue($userId, $this->appName, 'folder', 'eBooks');
+            $folderName = $this->config->getValueString($userId, $this->appName, 'folder', 'eBooks');
 
             try {
                 $booksFolder = $userFolder->get($folderName);
@@ -227,8 +227,8 @@ class SettingsController extends Controller {
 
         $userId = $user->getUID();
         return new JSONResponse([
-            'folder' => $this->config->getUserValue($userId, $this->appName, 'folder', 'eBooks'),
-            'auto_rename' => $this->config->getUserValue($userId, $this->appName, 'auto_rename', 'no')
+            'folder' => $this->config->getValueString($userId, $this->appName, 'folder', 'eBooks'),
+            'auto_rename' => $this->config->getValueString($userId, $this->appName, 'auto_rename', 'no')
         ]);
     }
 
@@ -244,7 +244,7 @@ class SettingsController extends Controller {
             'timestamp' => time()
         ];
 
-        $this->config->setUserValue($userId, $this->appName, 'batch_rename_progress', json_encode($progressData));
+        $this->config->setValueString($userId, $this->appName, 'batch_rename_progress', json_encode($progressData));
     }
 
     #[NoAdminRequired]
@@ -256,7 +256,7 @@ class SettingsController extends Controller {
         }
 
         $userId = $user->getUID();
-        $progressJson = $this->config->getUserValue($userId, $this->appName, 'batch_rename_progress', '{}');
+        $progressJson = $this->config->getValueString($userId, $this->appName, 'batch_rename_progress', '{}');
         $progress = json_decode($progressJson, true) ?: [];
 
         // Add default values if not set

@@ -3,7 +3,7 @@ namespace OCA\KoreaderCompanion\Service;
 
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IUserSession;
 use OCP\IDBConnection;
 use OCP\AppFramework\Http\StreamResponse;
@@ -22,7 +22,7 @@ class BookService {
 
     public function __construct(
         IRootFolder $rootFolder,
-        IConfig $config,
+        IUserConfig $config,
         IUserSession $userSession,
         IDBConnection $db,
         PdfMetadataExtractor $pdfExtractor,
@@ -54,7 +54,7 @@ class BookService {
             return [];
         }
 
-        $folderName = $this->config->getUserValue($user->getUID(), 'koreader_companion', 'folder', 'eBooks');
+        $folderName = $this->config->getValueString($user->getUID(), 'koreader_companion', 'folder', 'eBooks');
         $userFolder = $this->rootFolder->getUserFolder($user->getUID());
         
         try {
@@ -188,7 +188,7 @@ class BookService {
      */
     public function ensureMetadataUpToDate($userId) {
         try {
-            $folderName = $this->config->getUserValue($userId, 'koreader_companion', 'folder', 'eBooks');
+            $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
             $userFolder = $this->rootFolder->getUserFolder($userId);
 
             try {
@@ -256,7 +256,7 @@ class BookService {
         }
     }
 
-    private function ensureFileInDatabase(Node $file, string $userId, array &$existingMetadata = null) {
+    private function ensureFileInDatabase(Node $file, string $userId, ?array &$existingMetadata = null) {
         try {
             $fileId = $file->getId();
             $fileModTime = $file->getMTime();

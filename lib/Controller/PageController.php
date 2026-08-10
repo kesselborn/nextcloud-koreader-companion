@@ -13,7 +13,7 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http;
 use OCP\Files\IRootFolder;
 use OCP\IRequest;
-use OCP\IConfig;
+use OCP\Config\IUserConfig;
 use OCP\IUserSession;
 use OCP\IURLGenerator;
 use OCP\IDBConnection;
@@ -36,7 +36,7 @@ class PageController extends Controller {
         $appName,
         BookService $bookService,
         FilenameService $filenameService,
-        IConfig $config,
+        IUserConfig $config,
         IUserSession $userSession,
         IURLGenerator $urlGenerator,
         IDBConnection $db,
@@ -94,14 +94,14 @@ class PageController extends Controller {
 
         $hasKoreaderPassword = false;
         if ($user) {
-            $hasKoreaderPassword = !empty($this->config->getUserValue($user->getUID(), 'koreader_companion', 'koreader_sync_password', ''));
+            $hasKoreaderPassword = !empty($this->config->getValueString($user->getUID(), 'koreader_companion', 'koreader_sync_password', ''));
         }
 
         // Resolved here rather than in the template: the template used to reach
         // for \OC::$server->getConfig()/getUserSession(), both removed in NC 34.
         $userTimezone = date_default_timezone_get();
         if ($user) {
-            $configured = $this->config->getUserValue($user->getUID(), 'core', 'timezone', '');
+            $configured = $this->config->getValueString($user->getUID(), 'core', 'timezone', '');
             if ($configured !== '') {
                 $userTimezone = $configured;
             }
@@ -139,7 +139,14 @@ class PageController extends Controller {
         // Store MD5 hash for KOReader authentication compatibility
         // KOReader protocol requires MD5, so we store MD5 hash (not plain password)
         $md5Hash = md5($password);
-        $this->config->setUserValue($user->getUID(), 'koreader_companion', 'koreader_sync_password', $md5Hash);
+        // FLAG_SENSITIVE keeps the hash out of config listings and support dumps.
+        $this->config->setValueString(
+            $user->getUID(),
+            'koreader_companion',
+            'koreader_sync_password',
+            $md5Hash,
+            flags: IUserConfig::FLAG_SENSITIVE
+        );
 
         return new DataResponse([]);
     }
@@ -152,7 +159,7 @@ class PageController extends Controller {
             return new DataResponse(['error' => 'Not logged in'], 401);
         }
         
-        $hashedPassword = $this->config->getUserValue($user->getUID(), 'koreader_companion', 'koreader_sync_password', '');
+        $hashedPassword = $this->config->getValueString($user->getUID(), 'koreader_companion', 'koreader_sync_password', '');
         
         return new DataResponse([
             'password' => '', // Never return actual password for security
@@ -243,7 +250,7 @@ class PageController extends Controller {
             $userFolder = $this->rootFolder->getUserFolder($user->getUID());
 
             // Use the configured folder name
-            $folderName = $this->config->getUserValue($user->getUID(), 'koreader_companion', 'folder', 'eBooks');
+            $folderName = $this->config->getValueString($user->getUID(), 'koreader_companion', 'folder', 'eBooks');
 
             try {
                 $booksFolder = $userFolder->get($folderName);
@@ -291,7 +298,7 @@ class PageController extends Controller {
             ], function($value) { return $value !== ''; }));
 
             // Check if auto-rename is enabled for this user
-            $autoRename = $this->config->getUserValue($user->getUID(), 'koreader_companion', 'auto_rename', 'no');
+            $autoRename = $this->config->getValueString($user->getUID(), 'koreader_companion', 'auto_rename', 'no');
 
             if ($autoRename === 'yes') {
                 // Generate standardized filename based on final metadata
@@ -426,7 +433,7 @@ class PageController extends Controller {
             $this->storeBookMetadata($targetFile, $metadata);
 
             // Check if auto-rename is enabled before renaming based on updated metadata
-            $autoRename = $this->config->getUserValue($user->getUID(), 'koreader_companion', 'auto_rename', 'no');
+            $autoRename = $this->config->getValueString($user->getUID(), 'koreader_companion', 'auto_rename', 'no');
             $currentName = $targetFile->getName();
 
             if ($autoRename === 'yes') {
