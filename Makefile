@@ -34,7 +34,7 @@ BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .PHONY: help dev up down logs occ shell shell-www reset seed provision test \
         composer install clean appstore sign release nc31-up nc31-down nc31-provision \
-        mysql-up mysql-down mysql-provision
+        mysql-up mysql-down mysql-provision npm-install frontend watch
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -123,7 +123,16 @@ composer: ## Install PHP dependencies into ./vendor
 	  -e COMPOSER_CACHE_DIR=/tmp/composer/cache \
 	  $(COMPOSER_IMAGE) install --no-interaction --no-progress
 
-install: composer ## Alias for `composer`
+npm-install: ## Install frontend dependencies
+	npm install --no-audit --no-fund
+
+frontend: ## Build the Vue bundle into js/ and css/
+	npm run build
+
+watch: ## Rebuild the frontend on change
+	npm run watch
+
+install: composer npm-install ## Install PHP and frontend dependencies
 
 # --------------------------------------------------------------------- build
 
@@ -140,6 +149,11 @@ appstore: clean ## Build the app store tarball
 	  -e COMPOSER_HOME=/tmp/composer \
 	  -e COMPOSER_CACHE_DIR=/tmp/composer/cache \
 	  $(COMPOSER_IMAGE) install --no-dev --no-interaction --no-progress --optimize-autoloader
+
+	npm ci --no-audit --no-fund
+	npm run build
+	# Sourcemaps are ~8 MB and of no use to an installed app.
+	rm -f js/*.map css/*.map
 
 	cp -r appinfo   "$(source_dir)/$(app_name)/"
 	cp -r css       "$(source_dir)/$(app_name)/"

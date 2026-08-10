@@ -1,0 +1,106 @@
+name: CI
+
+# The repo previously had no CI on push or pull request at all -- release.yml only
+# fired on a published release, and pinned PHP 8.1, which NC 33+ no longer supports.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-lint:
+    name: PHP ${{ matrix.php }} lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in composer.json, through the version the NC 34
+        # container actually runs.
+        php: ['8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: gd, zip, iconv, zlib
+          coverage: none
+
+      # -w makes deprecations fail the job, which is the point: an implicitly
+      # nullable parameter slipped through until PHP 8.4 started warning.
+      - name: Lint
+        run: find lib templates -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Validate composer.json against the lock file
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --no-progress --prefer-dist
+
+  info-xml:
+    name: info.xml schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate against the published app store schema
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libxml2-utils
+          curl -sSfo /tmp/info.xsd https://apps.nextcloud.com/schema/apps/info.xsd
+          xmllint --noout --schema /tmp/info.xsd appinfo/info.xml
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches NC 34's own engines field.
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      # The bundles are committed because the app store tarball has no build
+      # step. If a source change lands without a rebuild, the shipped JS is
+      # stale -- so fail loudly rather than shipping a mismatch.
+      - name: Check the committed bundle is current
+        run: |
+          rm -f js/*.map css/*.map
+          if ! git diff --quiet -- js css; then
+            echo "::error::js/ and css/ are out of date. Run 'npm run build' and commit the result."
+            git diff --stat -- js css
+            exit 1
+          fi
+
+  integration:
+    name: OPDS + KOReader against Nextcloud 34
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot the stack
+        run: |
+          docker compose up -d --wait --build
+          ./dev/provision.sh
+
+      - name: OPDS suite
+        run: ./test_scripts/test_opds.sh --base-url http://localhost:8090
+
+      - name: KOReader sync suite
+        run: ./test_scripts/test_koreader.sh --base-url http://localhost:8090 --password test123
+
+      - name: Server log on failure
+        if: failure()
+        run: docker compose logs app | tail -200

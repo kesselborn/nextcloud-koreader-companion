@@ -19,9 +19,17 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@ec406be512d7077f68eed36e63f4d91bc006edc4 # v2
         with:
-          php-version: '8.1'
+          php-version: '8.3'
           extensions: zip
       
+      # make appstore now runs `npm ci && npm run build`, so the tarball ships
+      # freshly built assets rather than whatever happened to be committed.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
       - name: Build app tarball
         run: make appstore
       
