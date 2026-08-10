@@ -6,6 +6,8 @@ namespace OCA\KoreaderCompanion\AppInfo;
 
 use OCA\KoreaderCompanion\Listener\FileCreationListener;
 use OCA\KoreaderCompanion\Listener\FileDeleteListener;
+use OCA\KoreaderCompanion\Preview\ComicCoverProvider;
+use OCA\KoreaderCompanion\Preview\EpubCoverProvider;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -38,6 +40,25 @@ class Application extends App implements IBootstrap {
         $context->registerEventListener(NodeCreatedEvent::class, FileCreationListener::class);
         $context->registerEventListener(NodeWrittenEvent::class, FileCreationListener::class);
         $context->registerEventListener(NodeDeletedEvent::class, FileDeleteListener::class);
+
+        // Covers go through Nextcloud's preview system, so they are cached in
+        // preview storage, reachable at /core/preview with ordinary session auth,
+        // and visible in the Files app too.
+        //
+        // No PDF provider here, on purpose. Core ships OC\Preview\PDF, but
+        // Nextcloud 34.0.2 hard-codes IMagickSupport::hasExtension() and
+        // supportsFormat() to false, disabling every ImageMagick-backed provider
+        // -- a security measure, since Nextcloud picked ImageMagick by file
+        // extension and ImageMagick has a long CVE history
+        // (nextcloud/server#62802). Adding enabledPreviewProviders and
+        // ghostscript changes nothing while that holds; verified on 34.0.2.
+        //
+        // We could render PDFs with Imagick ourselves, and deliberately do not:
+        // that reintroduces the exposure upstream just closed, in an app built
+        // around files other people uploaded. PDFs fall back to Nextcloud's
+        // generic icon until upstream re-enables these providers.
+        $context->registerPreviewProvider(EpubCoverProvider::class, '/application\/epub\+zip/');
+        $context->registerPreviewProvider(ComicCoverProvider::class, '/application\/comicbook\+(rar|zip)/');
     }
 
     public function boot(IBootContext $context): void {

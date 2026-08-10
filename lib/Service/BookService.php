@@ -4,6 +4,8 @@ namespace OCA\KoreaderCompanion\Service;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\Config\IUserConfig;
+use OCP\Files\NotFoundException;
+use OCP\IPreview;
 use OCP\IUserSession;
 use OCP\IDBConnection;
 use OCP\AppFramework\Http\StreamResponse;
@@ -18,6 +20,7 @@ class BookService {
     private $db;
     private $pdfExtractor;
     private DocumentHashGenerator $hashGenerator;
+    private IPreview $previewManager;
     private LoggerInterface $logger;
 
     public function __construct(
@@ -27,6 +30,7 @@ class BookService {
         IDBConnection $db,
         PdfMetadataExtractor $pdfExtractor,
         DocumentHashGenerator $hashGenerator,
+        IPreview $previewManager,
         LoggerInterface $logger
     ) {
         $this->rootFolder = $rootFolder;
@@ -35,6 +39,7 @@ class BookService {
         $this->db = $db;
         $this->pdfExtractor = $pdfExtractor;
         $this->hashGenerator = $hashGenerator;
+        $this->previewManager = $previewManager;
         $this->logger = $logger;
     }
 
@@ -1146,6 +1151,20 @@ class BookService {
         }
     }
 
+    /**
+     * Cover image for a book, served through Nextcloud's preview system.
+     *
+     * The extraction itself lives in OCA\KoreaderCompanion\Preview\* providers,
+     * so the result is cached in preview storage instead of re-extracted per
+     * request, and the same image is reachable from the web UI over
+     * /core/preview with ordinary session auth. This endpoint stays because OPDS
+     * clients want a thumbnail link.
+     *
+     * PDF and MOBI have no provider: PDF because Nextcloud 34.0.2 disabled all
+     * ImageMagick-backed providers for security (nextcloud/server#62802), MOBI
+     * because nothing here can read its cover. Both yield 404, not 501, so
+     * clients treat it as "no cover" rather than "server broken".
+     */
     public function getThumbnail($book) {
         $user = $this->userSession->getUser();
         if (!$user) {
@@ -1155,249 +1174,33 @@ class BookService {
         try {
             $userFolder = $this->rootFolder->getUserFolder($user->getUID());
             $files = $userFolder->getById($book['id']);
-            
+
             if (empty($files)) {
                 return new DataResponse(['error' => 'File not found'], 404);
             }
-            
+
             $file = $files[0];
-            
-            if (strtolower($book['format']) === 'epub') {
-                return $this->extractEpubThumbnail($file);
-            } elseif (strtolower($book['format']) === 'cbr') {
-                if (class_exists('Kiwilan\Archive\Archive')) {
-                    return $this->extractCbrThumbnail($file);
-                } else {
-                    return new DataResponse(['message' => 'CBR thumbnail not available - Archive library not loaded'], 501);
-                }
-            } else {
-                // For other formats, return a placeholder
-                return new DataResponse(['message' => 'Thumbnail not available for this format'], 501);
+            if (!$this->previewManager->isAvailable($file)) {
+                return new DataResponse(['message' => 'No cover available for this format'], 404);
             }
-            
-        } catch (\Exception $e) {
-            return new DataResponse(['error' => 'Thumbnail extraction failed'], 500);
+
+            $preview = $this->previewManager->getPreview($file, 256, 384);
+            $response = new StreamResponse($preview->read());
+            $response->addHeader('Content-Type', $preview->getMimeType() ?: 'image/jpeg');
+            $response->addHeader('Content-Length', (string)$preview->getSize());
+            $response->addHeader('Cache-Control', 'private, max-age=86400');
+            return $response;
+        } catch (NotFoundException $e) {
+            return new DataResponse(['message' => 'No cover available'], 404);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Cover lookup failed', [
+                'book' => $book['id'] ?? null,
+                'exception' => $e,
+            ]);
+            return new DataResponse(['message' => 'No cover available'], 404);
         }
     }
 
-    private function extractEpubThumbnail($file) {
-        try {
-            // Read the EPUB file content
-            $content = $file->getContent();
-            
-            // Create temporary file to work with ZipArchive
-            $tempFile = tempnam(sys_get_temp_dir(), 'epub_thumb_');
-            file_put_contents($tempFile, $content);
-            
-            $zip = new \ZipArchive();
-            if ($zip->open($tempFile) !== TRUE) {
-                if (file_exists($tempFile)) { unlink($tempFile); }
-                return new DataResponse(['error' => 'Could not read EPUB file'], 500);
-            }
-            
-            // Find cover image
-            $coverImage = $this->findEpubCover($zip);
-            
-            if ($coverImage) {
-                $imageContent = $zip->getFromName($coverImage);
-                $zip->close();
-                if (file_exists($tempFile)) { unlink($tempFile); }
-                
-                if ($imageContent) {
-                    // Create thumbnail
-                    $thumbnail = $this->createThumbnail($imageContent);
-                    
-                    if ($thumbnail) {
-                        // Write thumbnail to temporary file and stream it
-                        $tempThumb = tempnam(sys_get_temp_dir(), 'thumb_');
-                        file_put_contents($tempThumb, $thumbnail);
-                        
-                        $response = new StreamResponse(fopen($tempThumb, 'r'));
-                        $response->addHeader('Content-Type', 'image/jpeg');
-                        $response->addHeader('Content-Length', strlen($thumbnail));
-                        
-                        // Clean up temp file after response (Note: this might not work as expected)
-                        register_shutdown_function(function() use ($tempThumb) {
-                            if (file_exists($tempThumb)) {
-                                if (file_exists($tempThumb)) { unlink($tempThumb); }
-                            }
-                        });
-                        
-                        return $response;
-                    }
-                }
-            }
-            
-            $zip->close();
-            if (file_exists($tempFile)) { unlink($tempFile); }
-            
-            return new DataResponse(['message' => 'No cover image found'], 404);
-            
-        } catch (\Exception $e) {
-            return new DataResponse(['error' => 'Thumbnail extraction failed: ' . $e->getMessage()], 500);
-        }
-    }
-
-    private function findEpubCover($zip) {
-        // Strategy 1: Look for container.xml to find OPF file
-        $containerXml = $zip->getFromName('META-INF/container.xml');
-        if ($containerXml) {
-            $container = simplexml_load_string($containerXml);
-            if ($container) {
-                $opfPath = (string)$container->rootfiles->rootfile['full-path'];
-                
-                // Parse OPF file to find cover
-                $opfContent = $zip->getFromName($opfPath);
-                if ($opfContent) {
-                    $opf = simplexml_load_string($opfContent);
-                    if ($opf) {
-                        // Look for cover in metadata
-                        foreach ($opf->metadata->meta as $meta) {
-                            if ((string)$meta['name'] === 'cover' && isset($meta['content'])) {
-                                $coverId = (string)$meta['content'];
-                                
-                                // Find the item with this ID
-                                foreach ($opf->manifest->item as $item) {
-                                    if ((string)$item['id'] === $coverId) {
-                                        $coverPath = dirname($opfPath) . '/' . (string)$item['href'];
-                                        return $coverPath;
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Alternative: look for items with properties="cover-image"
-                        foreach ($opf->manifest->item as $item) {
-                            if ((string)$item['properties'] === 'cover-image') {
-                                $coverPath = dirname($opfPath) . '/' . (string)$item['href'];
-                                return $coverPath;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Strategy 2: Common cover image filenames
-        $commonCoverNames = [
-            'cover.jpg', 'cover.jpeg', 'cover.png',
-            'Cover.jpg', 'Cover.jpeg', 'Cover.png',
-            'images/cover.jpg', 'images/cover.jpeg', 'images/cover.png',
-            'OEBPS/images/cover.jpg', 'OEBPS/images/cover.jpeg', 'OEBPS/images/cover.png'
-        ];
-        
-        foreach ($commonCoverNames as $coverName) {
-            if ($zip->locateName($coverName) !== false) {
-                return $coverName;
-            }
-        }
-        
-        return null;
-    }
-
-    private function createThumbnail($imageContent) {
-        try {
-            $image = imagecreatefromstring($imageContent);
-            if (!$image) {
-                return null;
-            }
-            
-            $width = imagesx($image);
-            $height = imagesy($image);
-            
-            // Calculate thumbnail dimensions (max 200x300, maintain aspect ratio)
-            $maxWidth = 200;
-            $maxHeight = 300;
-            
-            $ratio = min($maxWidth / $width, $maxHeight / $height);
-            $thumbWidth = intval($width * $ratio);
-            $thumbHeight = intval($height * $ratio);
-            
-            $thumbnail = imagecreatetruecolor($thumbWidth, $thumbHeight);
-            imagecopyresampled($thumbnail, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
-            
-            ob_start();
-            imagejpeg($thumbnail, null, 85);
-            $thumbnailContent = ob_get_clean();
-            
-            imagedestroy($image);
-            imagedestroy($thumbnail);
-            
-            return $thumbnailContent;
-            
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
-    private function extractCbrThumbnail($file) {
-        try {
-            // Read the CBR file content
-            $content = $file->getContent();
-            
-            // Create temporary file to work with Archive library
-            $tempFile = tempnam(sys_get_temp_dir(), 'cbr_thumb_');
-            file_put_contents($tempFile, $content);
-            
-            $archive = \Kiwilan\Archive\Archive::make($tempFile);
-            if (!$archive) {
-                if (file_exists($tempFile)) { unlink($tempFile); }
-                return new DataResponse(['error' => 'Could not read CBR file'], 500);
-            }
-            
-            // Get all files from the archive and find the first image
-            $files = $archive->getFiles();
-            $firstImage = null;
-            
-            foreach ($files as $archiveFile) {
-                $filename = $archiveFile->getName();
-                $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-                
-                // Look for image files (cover is usually first alphabetically)
-                if (in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'bmp'])) {
-                    $firstImage = $archiveFile;
-                    break;
-                }
-            }
-            
-            if ($firstImage) {
-                $imageContent = $firstImage->getContent();
-                
-                if ($imageContent) {
-                    // Create thumbnail
-                    $thumbnail = $this->createThumbnail($imageContent);
-                    
-                    if ($thumbnail) {
-                        // Write thumbnail to temporary file and stream it
-                        $tempThumb = tempnam(sys_get_temp_dir(), 'cbr_thumb_');
-                        file_put_contents($tempThumb, $thumbnail);
-                        
-                        $response = new StreamResponse(fopen($tempThumb, 'r'));
-                        $response->addHeader('Content-Type', 'image/jpeg');
-                        $response->addHeader('Content-Length', strlen($thumbnail));
-                        
-                        // Clean up temp files after response
-                        register_shutdown_function(function() use ($tempFile, $tempThumb) {
-                            if (file_exists($tempFile)) {
-                                if (file_exists($tempFile)) { unlink($tempFile); }
-                            }
-                            if (file_exists($tempThumb)) {
-                                if (file_exists($tempThumb)) { unlink($tempThumb); }
-                            }
-                        });
-                        
-                        return $response;
-                    }
-                }
-            }
-            
-            if (file_exists($tempFile)) { unlink($tempFile); }
-            return new DataResponse(['message' => 'No cover image found'], 404);
-            
-        } catch (\Exception $e) {
-            return new DataResponse(['error' => 'CBR thumbnail extraction failed: ' . $e->getMessage()], 500);
-        }
-    }
 
     private function parseEpubOPF($zip) {
         try {

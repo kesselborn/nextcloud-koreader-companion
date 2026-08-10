@@ -318,19 +318,39 @@ class OpdsController extends Controller {
     
     <link rel="http://opds-spec.org/acquisition" 
           type="' . $mimeType . '" 
-          href="' . $baseUrl . '/books/' . $bookId . '/download/' . $format . '"/>
-    <link rel="http://opds-spec.org/image/thumbnail" 
-          type="image/jpeg" 
-          href="' . $baseUrl . '/books/' . $bookId . '/thumb"/>
+          href="' . $baseUrl . '/books/' . $bookId . '/download/' . $format . '"/>'
+    . $this->thumbnailLink($baseUrl, $bookId, $format) . '
   </entry>
 ';
+    }
+
+    /**
+     * Thumbnail link, but only for formats that can actually produce one.
+     *
+     * Previously advertised unconditionally, so OPDS readers requested covers
+     * for PDF and MOBI and got an error back -- which clients render as a broken
+     * image rather than as "no cover". PDF is excluded because Nextcloud 34.0.2
+     * disabled all ImageMagick-backed preview providers for security
+     * (nextcloud/server#62802), not because of anything in this app.
+     */
+    private function thumbnailLink(string $baseUrl, $bookId, string $format): string {
+        $withCovers = ['epub', 'cbz', 'cbr'];
+        if (!in_array(strtolower($format), $withCovers, true)) {
+            return '';
+        }
+
+        return '
+    <link rel="http://opds-spec.org/image/thumbnail"
+          type="image/jpeg"
+          href="' . $baseUrl . '/books/' . $bookId . '/thumb"/>';
     }
 
     private function getMimeType($format) {
         $mimeTypes = [
             'epub' => 'application/epub+zip',
             'pdf' => 'application/pdf',
-            'cbr' => 'application/vnd.comicbook-rar',
+            'cbr' => 'application/comicbook+rar',
+            'cbz' => 'application/comicbook+zip',
             'mobi' => 'application/x-mobipocket-ebook',
             'txt' => 'text/plain'
         ];
