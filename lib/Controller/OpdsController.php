@@ -9,26 +9,23 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IRequest;
-use OCP\IConfig;
+use OCP\IURLGenerator;
 use OCP\IUserSession;
-use OCP\IUserManager;
 use OCP\Security\Bruteforce\IThrottler;
 
 class OpdsController extends Controller {
 
     private $bookService;
-    private $config;
     private $userSession;
-    private $userManager;
     private $throttler;
+    private $urlGenerator;
 
-    public function __construct(IRequest $request, $appName, BookService $bookService, IConfig $config, IUserSession $userSession, IUserManager $userManager, IThrottler $throttler) {
+    public function __construct(IRequest $request, $appName, BookService $bookService, IUserSession $userSession, IThrottler $throttler, IURLGenerator $urlGenerator) {
         parent::__construct($appName, $request);
         $this->bookService = $bookService;
-        $this->config = $config;
         $this->userSession = $userSession;
-        $this->userManager = $userManager;
         $this->throttler = $throttler;
+        $this->urlGenerator = $urlGenerator;
     }
 
     /**
@@ -62,7 +59,7 @@ class OpdsController extends Controller {
             );
         } catch (\OCP\Authentication\Exceptions\PasswordLoginForbiddenException $ex) {
             return false;
-        } catch (\OC\Security\Throttle\MaxDelayReached $ex) {
+        } catch (\OCP\Security\Bruteforce\MaxDelayReached $ex) {
             return false;
         }
     }
@@ -349,18 +346,15 @@ class OpdsController extends Controller {
     }
 
     private function getBaseUrl() {
-        $urlGenerator = \OC::$server->getURLGenerator();
-        return $urlGenerator->getAbsoluteURL($urlGenerator->linkToRoute($this->appName . '.opds.index'));
+        return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->linkToRoute($this->appName . '.opds.index'));
     }
 
     private function getOpenSearchUrl() {
-        $urlGenerator = \OC::$server->getURLGenerator();
-        return $urlGenerator->getAbsoluteURL($urlGenerator->linkToRoute($this->appName . '.opds.opensearch'));
+        return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->linkToRoute($this->appName . '.opds.opensearch'));
     }
 
     private function getSearchUrl() {
-        $urlGenerator = \OC::$server->getURLGenerator();
-        return $urlGenerator->getAbsoluteURL($urlGenerator->linkToRoute($this->appName . '.opds.search'));
+        return $this->urlGenerator->getAbsoluteURL($this->urlGenerator->linkToRoute($this->appName . '.opds.search'));
     }
 
     /**
@@ -374,7 +368,6 @@ class OpdsController extends Controller {
         }
         
         if ($page > $totalPages && $totalPages > 0) {
-            $urlGenerator = \OC::$server->getURLGenerator();
             $baseRoute = empty($searchQuery) ? 'koreader_companion.opds.index' : 'koreader_companion.opds.search';
             
             $params = [];
@@ -385,8 +378,8 @@ class OpdsController extends Controller {
                 $params['q'] = $searchQuery;
             }
             
-            $redirectUrl = $urlGenerator->getAbsoluteURL(
-                $urlGenerator->linkToRoute($baseRoute, $params)
+            $redirectUrl = $this->urlGenerator->getAbsoluteURL(
+                $this->urlGenerator->linkToRoute($baseRoute, $params)
             );
             
             return new RedirectResponse($redirectUrl);

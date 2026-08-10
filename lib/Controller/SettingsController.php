@@ -10,6 +10,7 @@ use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\IDBConnection;
 use OCP\Files\IRootFolder;
+use Psr\Log\LoggerInterface;
 
 class SettingsController extends Controller {
 
@@ -19,14 +20,16 @@ class SettingsController extends Controller {
     private $bookService;
     private $rootFolder;
     private $filenameService;
+    private $logger;
 
-    public function __construct(IRequest $request, IConfig $config, IUserSession $userSession, IDBConnection $db, BookService $bookService, IRootFolder $rootFolder, FilenameService $filenameService, $appName) {
+    public function __construct(IRequest $request, IConfig $config, IUserSession $userSession, IDBConnection $db, BookService $bookService, IRootFolder $rootFolder, FilenameService $filenameService, LoggerInterface $logger, $appName) {
         parent::__construct($appName, $request);
         $this->config = $config;
         $this->userSession = $userSession;
         $this->db = $db;
         $this->bookService = $bookService;
         $this->rootFolder = $rootFolder;
+        $this->logger = $logger;
 
         if (!$filenameService) {
             throw new \Exception('FilenameService not available - required for filename operations');
@@ -317,7 +320,7 @@ class SettingsController extends Controller {
             return $count;
         } catch (\Exception $e) {
             $this->db->rollBack();
-            \OC::$server->getLogger()->error('Failed to clear library metadata', [
+            $this->logger->error('Failed to clear library metadata', [
                 'user' => $userId,
                 'error' => $e->getMessage()
             ]);
