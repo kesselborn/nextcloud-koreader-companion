@@ -23,9 +23,12 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 - [x] 1.9 Fix `test_scripts/test_koreader.sh` for macOS — `md5hex` helper (verified: `md5hex test123` → `cc03e747…`)
 - [x] 1.10 Fix `test_scripts/test_opds.sh` for macOS — replace GNU-only `grep -oP`
 - [x] 1.11 Retire `test_scripts/reset_and_deploy.sh` — copy-in deploy is obsolete; drop dead `ebooks_poc` refs; rename command to `koreader:generate-hashes`
-- [ ] 1.12 Document local dev in `README.md`
-- [ ] 1.13 **Verify**: `make dev` reaches the login page; bind mount is live (edit CSS, reload, no `docker cp`)
-- [ ] 1.14 **Verify**: capture the actual NC 34 fatals in the log (evidence for the deck), then confirm NC 31 works
+- [x] 1.12 Document local dev in `README.md`
+- [x] 1.13 **Verify**: `make up` + `provision.sh` boot green on NC 34.0.2; app enables (with `--force`, confirming F5); 3/3 fixtures extract metadata
+- [x] 1.14 **Verify**: captured the real F1 fatal — `HTTP 500 Call to undefined method OC\Server::getConfig()` in `templates/page.php`
+- [ ] 1.15 **Verify**: NC 31 profile boots and the app works there (deferred — not needed now that NC 34 is green)
+- [x] 1.16 Ports moved to 8090/8091 (`APP_PORT`/`APP31_PORT`) — 8080 was taken by another local Nextcloud
+- [x] 1.17 `debug=true` must stay off — it enables NC's dirty-table-reads assertion and silently breaks metadata extraction on every upload
 
 Moved out of Phase 1:
 - 1.2 `dev/Dockerfile` with ghostscript + ImageMagick PDF policy → **Phase 3** (only PDF covers need it;
@@ -35,12 +38,13 @@ Moved out of Phase 1:
 
 - [ ] 2.1 `appinfo/info.xml` — bump to `min=34 max=35`, add `<php>`, add `<commands>`, add `<screenshot>`
 - [ ] 2.2 `composer.json` — `php: ^8.2`, promote `smalot/pdfparser` to a direct dependency
-- [ ] 2.3 `OpdsController` — inject `IURLGenerator`, kill 4× `\OC::$server->getURLGenerator()` (**F2**)
-- [ ] 2.4 `SettingsController` — inject `LoggerInterface`, kill `\OC::$server->getLogger()`
-- [ ] 2.5 `templates/page.php` — move timezone lookup into `PageController::index()`, kill `\OC::$server` (**F1**)
-- [ ] 2.6 `OpdsController:65` — catch the real `\OCP\Security\Bruteforce\MaxDelayReached` (**S6**)
+- [x] 2.3 `OpdsController` — inject `IURLGenerator`, kill 4× `\OC::$server->getURLGenerator()` (**F2**) — OPDS feed now HTTP 200
+- [x] 2.4 `SettingsController` — inject `LoggerInterface`, kill `\OC::$server->getLogger()`
+- [x] 2.5 `templates/page.php` — move timezone lookup into `PageController::index()`, kill `\OC::$server` (**F1**) — page now HTTP 200
+- [x] 2.6 `OpdsController:65` — catch the real `\OCP\Security\Bruteforce\MaxDelayReached` (**S6**)
 - [ ] 2.7 `Application.php` — drop duplicate navigation registration (**S7**), the `PdfMetadataExtractor` factory, and the manual autoload require
 - [ ] 2.8 Delete `appinfo/register_command.php`; `GenerateBookHashesCommand` → `#[AsCommand]`
+      (**confirmed live**: NC 34 logs the Symfony 6.1 `$defaultName` deprecation on every `occ` call)
 - [ ] 2.9 Delete the orphan docblock at `PageController.php:139-142` (parse-error trap)
 - [ ] 2.10 Controller annotations → PHP attributes: `KoreaderController` (4 methods)
 - [ ] 2.11 Controller annotations → PHP attributes: `OpdsController` (17 methods)
@@ -56,6 +60,16 @@ Moved out of Phase 1:
 - [ ] 2.21 Add `declare(strict_types=1)` + promoted constructor properties; `@template-implements` on listeners
 - [ ] 2.22 **Verify**: `app:enable` without `--force`; page renders; `/opds` valid XML; `occ app:check-code` clean
 - [ ] 2.23 **Verify**: migrations from scratch on Postgres **and** MySQL (S3 only reproduces on MySQL)
+
+### Found while verifying Phase 1 (new)
+
+- [ ] 2.24 Listener reads `oc_filecache` inside the upload's own write transaction — NC flags this as a
+      "dirty table read" and it throws on every WebDAV PUT when `debug=true`, silently producing no
+      metadata. Works only because dev keeps debug off. Needs the read moved out of the transaction.
+- [ ] 2.25 `oc_koreader_metadata.binary_hash` / `filename_hash` are always NULL — the real hashes live in
+      `oc_koreader_hash_mapping`. Dead columns, same as `cover_image`; drop them.
+- [ ] 2.26 Response `Content-Type` is deliberately `application/json`, **not** the vendor type — do not
+      "fix" it (v1.2.3 / issue #4 / koreader/koreader#13539). Worth a code comment next to the header.
 
 ## Phase 3 — Covers via Nextcloud's preview system
 
