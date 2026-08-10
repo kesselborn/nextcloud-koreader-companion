@@ -174,6 +174,15 @@
   .details-body ul { padding-left: 1.1em; margin: 12px 0 0; }
   .details-body li { color: var(--ink-2); font-size: .92rem; margin-bottom: 8px; }
 
+  .repro { margin-top: 40px; border: 1px solid var(--line); border-left: 3px solid var(--ok); background: var(--paper); border-radius: 3px; padding: 22px 24px; }
+  .repro p { margin: 0 0 14px; color: var(--ink-2); max-width: 68ch; font-size: .95rem; }
+  .repro .eyebrow { color: var(--ok); margin-bottom: 12px; }
+  .repro pre { margin: 0; overflow-x: auto; background: var(--sunk); border: 1px solid var(--line-2);
+               border-radius: 3px; padding: 14px 16px; }
+  .repro pre code { background: none; border: 0; padding: 0; white-space: pre; font-size: .78rem; line-height: 1.7; color: var(--ink-2); }
+  .repro pre b { color: var(--ink); font-weight: 700; }
+  .repro .note { margin: 14px 0 0; font-size: .88rem; color: var(--ink-3); }
+
   footer { margin-top: 72px; border-top: 1px solid var(--line); padding-top: 22px; color: var(--ink-3); font-size: .84rem; }
   footer p { margin: 0 0 8px; max-width: 76ch; }
 
@@ -203,6 +212,31 @@
     <div><dt>jQuery call sites</dt><dd class="n-crit">101<small>jQuery gone since NC 33</small></dd></div>
     <div><dt>Backend LOC</dt><dd class="n-ok">7.5k<small>largely salvageable</small></dd></div>
   </dl>
+
+  <div class="repro">
+    <p class="eyebrow">Reproduced, then fixed &mdash; on a real Nextcloud 34.0.2</p>
+    <p>
+      A dev stack now boots the app on Nextcloud&nbsp;34.0.2 with PostgreSQL&nbsp;17. Both server-side
+      fatals were confirmed from the live log and then repaired, so the backend column below is no longer
+      a prediction:
+    </p>
+    <pre><code># before &mdash; the predicted F1 fatal, caught in the container log
+$ curl -o /dev/null -w '%{http_code}' .../apps/koreader_companion/
+<b>500</b>
+PHP Fatal error: Call to undefined method OC\Server::getConfig()
+  in custom_apps/koreader_companion/templates/page.php
+
+# after &mdash; F1 and F2 fixed
+$ curl ... /apps/koreader_companion/        <b>200</b>   library page renders
+$ curl ... /apps/koreader_companion/opds    <b>200</b>   valid OPDS XML
+
+$ ./test_scripts/test_opds.sh      <b>29 passed, 0 failed</b>
+$ ./test_scripts/test_koreader.sh  <b>13 passed, 0 failed</b></code></pre>
+    <p class="note">
+      The frontend blockers (F3, F4) are untouched &mdash; they need the Vue rewrite. The page returns 200
+      and renders server-side; its JavaScript is still dead.
+    </p>
+  </div>
 </header>
 
 <section>
@@ -507,6 +541,44 @@
     <span class="when w">Hygiene</span>
     <span class="where">Once in <span class="m">info.xml</span> and again in
       <span class="m">Application::boot()</span>, both with the same id.</span>
+  </div>
+
+  <h3>Found only by running it</h3>
+  <p class="prose" style="color:var(--ink-2)">
+    Three things the static read could not have told us, all surfaced by booting the app on 34:
+  </p>
+
+  <div class="find">
+    <span class="tag warn">R1</span>
+    <span class="what">Turning on <span class="m">debug</span> silently breaks all metadata extraction</span>
+    <span class="when w">Runtime</span>
+    <span class="where">With <span class="m">debug=true</span>, Nextcloud enables its
+      <em>dirty table reads</em> assertion. The upload listener reads <span class="m">oc_filecache</span>
+      inside the very transaction the upload just wrote to, so it throws on every WebDAV
+      <span class="m">PUT</span> and the metadata table stays empty &mdash; with no visible error for the
+      user. It works today only because nobody develops with debug on.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">R2</span>
+    <span class="what">Two more dead database columns</span>
+    <span class="when w">Runtime</span>
+    <span class="where"><span class="m">binary_hash</span> and <span class="m">filename_hash</span> in
+      <span class="m">oc_koreader_metadata</span> are always <span class="m">NULL</span>; the real hashes
+      live in <span class="m">oc_koreader_hash_mapping</span>. Same story as
+      <span class="m">cover_image</span>.</span>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">R3</span>
+    <span class="what">The test suite disagreed with the code &mdash; and the code was right</span>
+    <span class="when w">Corrected</span>
+    <span class="where">Three assertions demanded a
+      <span class="m">application/vnd.koreader.v1+json</span> response. But v1.2.3 deliberately changed
+      that to <span class="m">application/json</span>, because real KOReader clients otherwise fail to
+      <em>pull</em> progress and report &ldquo;No progress found for this document&rdquo; (issue&nbsp;#4,
+      upstream <span class="m">koreader/koreader#13539</span>). The stale expectation was moved, not the
+      header &mdash; the more spec-looking value is the broken one.</span>
   </div>
 
   <details>

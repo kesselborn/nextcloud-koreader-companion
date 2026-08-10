@@ -107,4 +107,4 @@ Moved out of Phase 1:
 
 - [x] 5.1 Build the single-page HTML deck → `docs/nc34-audit.html`
 - [x] 5.2 Publish as an Artifact — https://claude.ai/code/artifact/a592fb28-185d-4287-8118-ae347e4d579a
-- [ ] 5.3 Refresh the deck once Phase 1 produces real `occ log:tail` fatal output (task 1.14)
+- [x] 5.3 Refresh the deck with the reproduced-and-fixed evidence and the three runtime-only findings (R1-R3)
