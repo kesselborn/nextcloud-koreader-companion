@@ -11,6 +11,7 @@ use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
@@ -24,9 +25,11 @@ use Symfony\Component\Console\Output\OutputInterface;
  * hashes generated yet, using the DocumentHashGenerator service to create both
  * binary and filename hashes for KOReader sync compatibility.
  */
+#[AsCommand(
+    name: 'koreader:generate-hashes',
+    description: 'Generate hashes for existing books in the database',
+)]
 class GenerateBookHashesCommand extends Command {
-
-    protected static $defaultName = 'koreader:generate-hashes';
 
     private DocumentHashGenerator $hashGenerator;
     private IDBConnection $db;
@@ -54,8 +57,6 @@ class GenerateBookHashesCommand extends Command {
 
     protected function configure(): void {
         $this
-            ->setName('koreader:generate-hashes')
-            ->setDescription('Generate hashes for existing books in the database')
             ->setHelp('This command generates binary and filename hashes for all existing books in the koreader_metadata table that do not have hashes yet. This is needed for KOReader sync compatibility.')
             ->addOption(
                 'dry-run',

@@ -1,9 +1,11 @@
 <?php
+
+declare(strict_types=1);
+
 namespace OCA\KoreaderCompanion\AppInfo;
 
 use OCA\KoreaderCompanion\Listener\FileCreationListener;
 use OCA\KoreaderCompanion\Listener\FileDeleteListener;
-use OCA\KoreaderCompanion\Service\PdfMetadataExtractor;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -11,7 +13,6 @@ use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\Files\Events\Node\NodeCreatedEvent;
 use OCP\Files\Events\Node\NodeDeletedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use Psr\Log\LoggerInterface;
 
 class Application extends App implements IBootstrap {
 
@@ -19,8 +20,14 @@ class Application extends App implements IBootstrap {
 
     public function __construct() {
         parent::__construct(self::APP_ID);
-        
-        // Load composer autoloader for our dependencies
+
+        // Required, despite appearances. Nextcloud's app autoloader resolves this
+        // app's own OCA\KoreaderCompanion\* classes, but not third-party PSR-4
+        // namespaces from composer -- so without this, Kiwilan\Archive\Archive is
+        // missing at runtime and EPUB/PDF metadata extraction silently degrades to
+        // filename parsing ("Class \"Kiwilan\Archive\Archive\" not found", caught
+        // and logged by PdfMetadataExtractor). Removing this looks like dead code
+        // and is not.
         $composerAutoload = __DIR__ . '/../../vendor/autoload.php';
         if (file_exists($composerAutoload)) {
             require_once $composerAutoload;
@@ -28,33 +35,11 @@ class Application extends App implements IBootstrap {
     }
 
     public function register(IRegistrationContext $context): void {
-        // Register services
-        $context->registerService(PdfMetadataExtractor::class, function ($c) {
-            return new PdfMetadataExtractor(
-                $c->get(LoggerInterface::class)
-            );
-        });
-
-
-        // Register file event listeners
         $context->registerEventListener(NodeCreatedEvent::class, FileCreationListener::class);
         $context->registerEventListener(NodeWrittenEvent::class, FileCreationListener::class);
         $context->registerEventListener(NodeDeletedEvent::class, FileDeleteListener::class);
     }
 
     public function boot(IBootContext $context): void {
-        // Register navigation entry
-        $navigationManager = $context->getAppContainer()->get('OCP\INavigationManager');
-        $urlGenerator = $context->getAppContainer()->get('OCP\IURLGenerator');
-        
-        $navigationManager->add(function () use ($urlGenerator) {
-            return [
-                'id' => 'koreader_companion',
-                'order' => 10,
-                'href' => $urlGenerator->linkToRoute('koreader_companion.page.index'),
-                'icon' => $urlGenerator->imagePath('koreader_companion', 'icon.svg'),
-                'name' => 'KOReader',
-            ];
-        });
     }
 }
