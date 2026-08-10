@@ -5,38 +5,32 @@ declare(strict_types=1);
 namespace OCA\KoreaderCompanion\Migration;
 
 use Closure;
-use OCP\DB\ISchemaWrapper;
-use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Migration to properly drop the koreader_file_tracking table
+ * Historical no-op.
  *
- * This fixes the bug in Version0004 where the table was not dropped due to
- * missing the oc_ prefix in the DROP TABLE statement.
+ * This step used to run:
+ *
+ *     DROP TABLE IF EXISTS `oc_koreader_file_tracking`
+ *
+ * which never worked anywhere:
+ *
+ *  - On PostgreSQL the backticks are a syntax error ("syntax error at or near
+ *    `"), so the statement threw and the surrounding try/catch swallowed it.
+ *  - The `oc_` prefix was hardcoded, so it could never match an installation
+ *    using a custom dbtableprefix.
+ *  - Verified on a fresh Nextcloud 34.0.2 install: koreader_file_tracking was
+ *    still present afterwards on both PostgreSQL and MariaDB.
+ *
+ * The body is kept empty rather than deleted so the migration version stays in
+ * oc_migrations for installs that already recorded it. Version0006 performs the
+ * drop declaratively, which is the supported way.
  */
 class Version0005Date20251003000000 extends SimpleMigrationStep {
 
-    private IDBConnection $db;
-
-    public function __construct(IDBConnection $db) {
-        $this->db = $db;
-    }
-
-    /**
-     * @param IOutput $output
-     * @param Closure $schemaClosure
-     * @param array $options
-     */
     public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-        $output->info('Dropping orphaned file tracking table...');
-
-        try {
-            $this->db->executeStatement('DROP TABLE IF EXISTS `oc_koreader_file_tracking`');
-            $output->info('File tracking table dropped successfully');
-        } catch (\Exception $e) {
-            $output->warning('Could not drop file tracking table: ' . $e->getMessage());
-        }
+        $output->info('Superseded by Version0006 (see class docblock); nothing to do.');
     }
 }

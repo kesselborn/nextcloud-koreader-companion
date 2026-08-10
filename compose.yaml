@@ -117,8 +117,62 @@ services:
       - ./:/var/www/html/custom_apps/koreader_companion:cached
       - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
 
+  # ---------------------------------------------------------------------
+  # MySQL/MariaDB variant of the NC 34 stack on :8092.
+  #   make mysql-up && make mysql-provision
+  # Exists because a few schema problems only show up on MySQL: InnoDB caps an
+  # index key at 3072 bytes, so utf8mb4 columns wider than 768 characters
+  # cannot be fully indexed. Postgres will never reproduce those.
+  # ---------------------------------------------------------------------
+  dbmysql:
+    image: mariadb:11
+    profiles: ["mysql"]
+    restart: unless-stopped
+    command: >-
+      --transaction-isolation=READ-COMMITTED
+      --log-bin=binlog
+      --binlog-format=ROW
+    environment:
+      MARIADB_ROOT_PASSWORD: nextcloud
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: nextcloud
+    volumes:
+      - dbmysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -unextcloud -pnextcloud -e 'select 1' nextcloud"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 15s
+
+  appmysql:
+    <<: *nextcloud-common
+    image: nextcloud:34.0.2-apache
+    profiles: ["mysql"]
+    depends_on:
+      dbmysql:
+        condition: service_healthy
+    ports:
+      - "${APPMYSQL_PORT:-8092}:80"
+    environment:
+      <<: *nextcloud-env
+      MYSQL_HOST: dbmysql
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud
+      NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 host.docker.internal appmysql"
+      OVERWRITEHOST: "localhost:${APPMYSQL_PORT:-8092}"
+      OVERWRITECLIURL: "http://localhost:${APPMYSQL_PORT:-8092}"
+    volumes:
+      - nextcloudmysql_html:/var/www/html
+      - ./:/var/www/html/custom_apps/koreader_companion:cached
+      - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+
 volumes:
   db_data:
   nextcloud_html:
   db31_data:
   nextcloud31_html:
+  dbmysql_data:
+  nextcloudmysql_html:
