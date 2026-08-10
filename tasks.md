@@ -92,13 +92,30 @@ Moved out of Phase 1:
 
 ## Phase 3 — Covers via Nextcloud's preview system
 
-- [ ] 3.1 Add `EpubPreviewProvider` (`IProviderV2`) — move logic out of `BookService::getThumbnail()`
-- [ ] 3.2 Add `CbrPreviewProvider` (`IProviderV2`)
-- [ ] 3.3 Register both via `registerPreviewProvider()` in `Application::register()`
-- [ ] 3.4 Document the `OC\Preview\PDF` admin toggle; degrade to a placeholder when off (never 500)
-- [ ] 3.5 Delete the bespoke thumbnail path + unused `cover_image` column + `class_exists` guards
-- [ ] 3.6 Stop advertising an OPDS thumbnail link for formats with no cover
-- [ ] 3.7 **Verify**: EPUB/CBR/PDF each yield `/core/preview?fileId=…`; second hit is cached; PDF-off → placeholder
+- [x] 3.1 Added `EpubCoverProvider` (`IProviderV2`) + shared `CoverProvider` base
+- [x] 3.2 Added `ComicCoverProvider` — CBZ natively via ZipArchive, CBR via kiwilan+unrar
+- [x] 3.3 Registered both via `registerPreviewProvider()`
+- [x] 3.4 **PDF covers are impossible on NC 34.0.2** — not a config issue. That release hard-codes
+      `IMagickSupport::hasExtension()`/`supportsFormat()` to `false`, disabling every ImageMagick-backed
+      provider, as a security measure (nextcloud/server#62802). Verified: gs + imagick both read the PDF,
+      yet `occ preview:generate` still says no generator. Degrades to 404/generic icon. **Deliberately not
+      worked around** — shipping our own Imagick PDF provider would reintroduce the closed exposure.
+- [x] 3.5a Deleted the bespoke thumbnail path (251 lines); `getThumbnail()` now uses `IPreview`
+- [ ] 3.5b Drop the unused `cover_image`, `binary_hash`, `filename_hash` columns (needs a migration)
+- [x] 3.6 OPDS advertises a thumbnail link only for epub/cbz/cbr; added the missing `cbz` mimetype and
+      corrected `cbr` to `application/comicbook+rar` (matches Nextcloud's own mapping)
+- [x] 3.7 **Verify**: EPUB + CBZ return 200 JPEG from `/core/preview`, cached in `oc_previews` at two
+      sizes; CBZ fixture stored in reverse page order still yields `page1.jpg` (md5-confirmed);
+      PDF/MOBI → 404. CBR untested end-to-end (no CBR fixture — needs a real RAR writer).
+
+### Found during Phase 3 (new)
+
+- [ ] 3.8 **CBZ is not a supported library format** — the app indexes `epub, pdf, cbr, mobi` in four
+      places, omitting `cbz`, which is both the more common comic format and the only one that works
+      without extra binaries. Covers already work for it at the preview layer; library indexing does not.
+      Needs one shared constant for the extension list plus the `=== 'cbr'` metadata branches widened.
+- [ ] 3.9 Consider dropping `mobi` — no cover extraction, no preview provider, no metadata parser. It is
+      listed as supported but does almost nothing.
 
 ## Phase 4 — Vue frontend rewrite
 
