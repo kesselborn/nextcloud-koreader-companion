@@ -4,6 +4,9 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Http\XMLResponse;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -64,11 +67,9 @@ class OpdsController extends Controller {
         }
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function index() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -95,11 +96,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function opensearch() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -125,11 +124,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function search() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -157,11 +154,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function download($id, $format) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -178,11 +173,9 @@ class OpdsController extends Controller {
         return $this->bookService->downloadBook($book, $format);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function thumbnail($id) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -528,11 +521,9 @@ class OpdsController extends Controller {
     }
 
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function authors() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -558,11 +549,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function authorBooks($author) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -591,11 +580,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function series() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -621,11 +608,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function seriesBooks($seriesName) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -653,11 +638,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function genres() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -683,11 +666,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function genreBooks($genre) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -716,11 +697,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function formats() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -746,11 +725,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function formatBooks($format) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -779,11 +756,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function languages() {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);
@@ -809,11 +784,9 @@ class OpdsController extends Controller {
         return $response;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     * @PublicPage
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[PublicPage]
     public function languageBooks($language) {
         if (!$this->authenticateBasicAuth()) {
             $response = new DataResponse(['error' => 'Unauthorized'], 401);

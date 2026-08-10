@@ -4,6 +4,8 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Service\FilenameService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
@@ -48,10 +50,8 @@ class SettingsController extends Controller {
         return $user;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function setFolder($folder) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -82,10 +82,8 @@ class SettingsController extends Controller {
         ]);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function setAutoRename($auto_rename) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -99,10 +97,8 @@ class SettingsController extends Controller {
         return new JSONResponse([]);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function batchRename($auto_rename) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -224,10 +220,8 @@ class SettingsController extends Controller {
         ]);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function getSettings() {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -256,10 +250,8 @@ class SettingsController extends Controller {
         $this->config->setUserValue($userId, $this->appName, 'batch_rename_progress', json_encode($progressData));
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function getBatchRenameProgress() {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {

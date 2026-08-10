@@ -4,6 +4,9 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\IDBConnection;
@@ -48,11 +51,9 @@ class KoreaderController extends Controller {
     }
 
     
-    /**
-     * @NoCSRFRequired
-     * @PublicPage
-     * @NoAdminRequired
-     */
+    #[NoCSRFRequired]
+    #[PublicPage]
+    #[NoAdminRequired]
     public function authUser() {
         if (!$this->authenticateKoreader()) {
             return $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
@@ -61,11 +62,9 @@ class KoreaderController extends Controller {
         return $this->createKoreaderResponse(['message' => 'OK']);
     }
 
-    /**
-     * @NoCSRFRequired
-     * @PublicPage
-     * @NoAdminRequired
-     */
+    #[NoCSRFRequired]
+    #[PublicPage]
+    #[NoAdminRequired]
     public function getProgress($document) {
         if (!$this->authenticateKoreader()) {
             return $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
@@ -103,11 +102,9 @@ class KoreaderController extends Controller {
         ]);
     }
 
-    /**
-     * @NoCSRFRequired
-     * @PublicPage
-     * @NoAdminRequired
-     */
+    #[NoCSRFRequired]
+    #[PublicPage]
+    #[NoAdminRequired]
     public function updateProgress() {
         if (!$this->authenticateKoreader()) {
             return $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
@@ -146,11 +143,9 @@ class KoreaderController extends Controller {
         return $this->createKoreaderResponse(['message' => 'Progress updated']);
     }
 
-    /**
-     * @NoCSRFRequired
-     * @PublicPage
-     * @NoAdminRequired
-     */
+    #[NoCSRFRequired]
+    #[PublicPage]
+    #[NoAdminRequired]
     public function healthcheck() {
         return $this->createKoreaderResponse(['state' => 'OK']);
     }

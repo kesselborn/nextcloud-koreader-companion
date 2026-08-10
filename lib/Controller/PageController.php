@@ -5,6 +5,8 @@ use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\FilenameService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\JSONResponse;
@@ -59,10 +61,8 @@ class PageController extends Controller {
         $this->logger = $logger;
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function index() {
         $page = max(1, (int)$this->request->getParam('page', 1));
         $perPage = 50; // Fixed page size of 50 books
@@ -124,10 +124,8 @@ class PageController extends Controller {
         ]);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function setKoreaderPassword() {
         $user = $this->userSession->getUser();
         if (!$user) {
@@ -147,15 +145,8 @@ class PageController extends Controller {
         return new DataResponse([]);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
-
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function getKoreaderPassword() {
         $user = $this->userSession->getUser();
         if (!$user) {
@@ -236,10 +227,8 @@ class PageController extends Controller {
         }, $books);
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function uploadBook() {
         try {
             // Get the uploaded file
@@ -338,10 +327,8 @@ class PageController extends Controller {
         }
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function extractMetadata() {
         try {
             // Get the uploaded file
@@ -377,10 +364,8 @@ class PageController extends Controller {
         }
     }
 
-    /**
-     * @NoAdminRequired
-     * @NoCSRFRequired
-     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function updateMetadata($id) {
         try {
             // Try to parse raw input if request params are empty
@@ -475,9 +460,9 @@ class PageController extends Controller {
 
     /**
      * Delete a book from the library
-     * @NoAdminRequired
-     * @NoCSRFRequired
      */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function deleteBook($id) {
         try {
             // Get the book file by ID
