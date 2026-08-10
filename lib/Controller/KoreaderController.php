@@ -4,6 +4,7 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -54,9 +55,12 @@ class KoreaderController extends Controller {
     #[NoCSRFRequired]
     #[PublicPage]
     #[NoAdminRequired]
+    #[BruteForceProtection(action: 'koreader_sync')]
     public function authUser() {
         if (!$this->authenticateKoreader()) {
-            return $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
+            $response = $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
+            $response->throttle(['action' => 'koreader_sync']);
+            return $response;
         }
         
         return $this->createKoreaderResponse(['message' => 'OK']);
@@ -65,9 +69,12 @@ class KoreaderController extends Controller {
     #[NoCSRFRequired]
     #[PublicPage]
     #[NoAdminRequired]
+    #[BruteForceProtection(action: 'koreader_sync')]
     public function getProgress($document) {
         if (!$this->authenticateKoreader()) {
-            return $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
+            $response = $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
+            $response->throttle(['action' => 'koreader_sync']);
+            return $response;
         }
 
         $syncUser = $this->getCurrentSyncUser();
@@ -105,9 +112,12 @@ class KoreaderController extends Controller {
     #[NoCSRFRequired]
     #[PublicPage]
     #[NoAdminRequired]
+    #[BruteForceProtection(action: 'koreader_sync')]
     public function updateProgress() {
         if (!$this->authenticateKoreader()) {
-            return $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
+            $response = $this->createKoreaderResponse(['message' => 'Unauthorized'], 401);
+            $response->throttle(['action' => 'koreader_sync']);
+            return $response;
         }
 
         $syncUser = $this->getCurrentSyncUser();
@@ -176,10 +186,9 @@ class KoreaderController extends Controller {
         $authSuccess = false;
 
         if (strlen($authKey) === 32 && ctype_xdigit($authKey)) {
-            // KOReader sent MD5 hash - compare directly with stored MD5 hash
-            if ($authKey === $storedMd5Hash) {
-                $authSuccess = true;
-            }
+            // hash_equals, not ===, so the comparison does not leak the stored
+            // hash one byte at a time through response timing.
+            $authSuccess = hash_equals($storedMd5Hash, $authKey);
         }
 
         if (!$authSuccess) {
