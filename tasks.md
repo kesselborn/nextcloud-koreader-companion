@@ -57,7 +57,7 @@ Moved out of Phase 1:
 - [x] 2.15 Replaced `IConfig` with `IUserConfig` (21 sites, 7 files); sync password written with
       `FLAG_SENSITIVE`. Note: the sensitive flag is **code-verified only** — the sole write path is a
       session-authed writer that now requires a CSRF token, and neither Basic auth nor an app password
-      satisfies it (both 412). Needs a browser check in Phase 4.
+      satisfies it (both 412). **Now verified in Phase 4**: a browser write produced `flags=1` with an encrypted value.
 - [x] 2.16 ~~Migration fix — index `file_path_hash` instead of the 4000-char `file_path`~~ **RETRACTED**:
       tested on real MariaDB 11 — no `ERROR 1071`. MariaDB silently narrows the index to `file_path(768)`,
       which is ample for real paths. No fix warranted; the deck has been corrected.
@@ -119,25 +119,31 @@ Moved out of Phase 1:
 
 ## Phase 4 — Vue frontend rewrite
 
-- [ ] 4.1 `package.json` + `vite.config.js` pinned to NC 34.0.2's own dep set
-- [ ] 4.2 `PageController::index()` → `IInitialState` + `Util::addScript/addStyle`
-- [ ] 4.3 App shell — `NcContent`/`NcAppNavigation`/`NcAppContent` (replaces the removed snapper + JS hamburger)
-- [ ] 4.4 Library view — cover grid, progress bar, last-sync; fixes the empty-library dead-end
-- [ ] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today)
+- [x] 4.1 `package.json` + `vite.config.js` pinned to NC 34.0.2's own dep set
+- [x] 4.2 `PageController::index()` → `IInitialState` + `Util::addScript/addStyle`
+- [x] 4.3 App shell — `NcContent`/`NcAppNavigation`/`NcAppContent` (replaces the removed snapper + JS hamburger)
+- [x] 4.4 Library view — cover grid, progress bar, last-sync; fixes the empty-library dead-end
+- [x] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today)
 - [ ] 4.5b Extract EPUB series from `calibre:series` — found during Phase 1: `parseEpubOPF()` reads
       title/author/language/publisher/subject/date/identifier but **not** series, so the `series` column
       and the OPDS series facet are always empty for EPUB (only CBR sets series)
-- [ ] 4.6 Upload modal → Vue; keep the two-step extract-then-confirm flow
-- [ ] 4.7 Metadata edit/delete modal → Vue; surface series/publisher/description for all formats
-- [ ] 4.8 Settings + Sync + OPDS sections → Vue; `getFilePickerBuilder()` replaces `OC.dialogs.filepicker`
-- [ ] 4.9 Replace 26× `OC.Notification.showTemporary` with `@nextcloud/dialogs` toasts (**F4**)
-- [ ] 4.10 Replace `OC.generateUrl` → `@nextcloud/router`, `OC.requestToken` → `@nextcloud/axios`
-- [ ] 4.11 Delete `js/koreader.js`, `js/upload.js`, and the legacy `templates/page.php` body (**F3**)
-- [ ] 4.12 Add `.php-cs-fixer.dist.php`, `psalm.xml`, `tests/` skeleton
-- [ ] 4.13 Add PR CI workflow with an NC 34/35 matrix (`release.yml` pins PHP 8.1 and only runs on release)
-- [ ] 4.14 **Verify**: full UI walkthrough with console open — zero `$ is not defined` / `OC.Notification`
-- [ ] 4.15 **Verify**: `test_opds.sh -v` and `test_koreader.sh -v` pass on macOS
-- [ ] 4.16 **Verify**: CSRF-less POST rejected; repeated bad `x-auth-key` throttled
+- [x] 4.6 Upload modal → Vue; keep the two-step extract-then-confirm flow
+- [x] 4.7 Metadata edit/delete modal → Vue; surface series/publisher/description for all formats
+- [x] 4.8 Settings + Sync + OPDS sections → Vue; `getFilePickerBuilder()` replaces `OC.dialogs.filepicker`
+- [x] 4.9 Replace 26× `OC.Notification.showTemporary` with `@nextcloud/dialogs` toasts (**F4**)
+- [x] 4.10 Replace `OC.generateUrl` → `@nextcloud/router`, `OC.requestToken` → `@nextcloud/axios`
+- [x] 4.11 Delete `js/koreader.js`, `js/upload.js`, and the legacy `templates/page.php` body (**F3**)
+- [ ] 4.12 Add `.php-cs-fixer.dist.php`, `psalm.xml`, `tests/` skeleton (deferred: CI now covers
+      `php -l` 8.2–8.5, `composer validate --strict`, info.xml schema, frontend build and both
+      integration suites; static analysis and unit tests are the remaining gap)
+- [x] 4.13 Add PR CI workflow with an NC 34/35 matrix (`release.yml` pins PHP 8.1 and only runs on release)
+- [x] 4.14 **Verify**: real Chrome session, **zero console errors**. 3 books, 2 EPUB covers decoded at
+      256×384, PDF placeholder, progress 63% + device, search `kafka` → 1 book server-side, `sort=recent`
+      sent, all 4 tabs render, upload + metadata modals open with prefilled values
+- [x] 4.15 **Verify**: 29/29 OPDS + 13/13 KOReader on macOS
+- [x] 4.16 **Verify**: CSRF-less writes rejected (412) *and* browser writes succeed through axios —
+      metadata saved, and the sync password write produced `flags=1` (FLAG_SENSITIVE) with an encrypted
+      value, closing the item 2.15 left open. Throttling verified earlier (401×10 → 429).
 
 ## Phase 5 — Findings deck (done first, on request)
 
