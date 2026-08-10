@@ -55,7 +55,7 @@ dev: up composer provision ## Boot, install deps, provision and seed (start here
 	@echo
 
 up: ## Start the stack and wait until it is healthy
-	$(DC) up -d --wait
+	$(DC) up -d --wait --build
 
 down: ## Stop the stack (keeps volumes)
 	$(DC) down

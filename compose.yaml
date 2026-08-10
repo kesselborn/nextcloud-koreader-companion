@@ -64,7 +64,12 @@ services:
 
   app:
     <<: *nextcloud-common
-    image: nextcloud:34.0.2-apache
+    # Built from dev/Dockerfile: NC 34.0.2 plus ghostscript (PDF covers) and
+    # unrar-free (CBR covers), neither of which the official image ships.
+    build:
+      context: ./dev
+      dockerfile: Dockerfile
+    image: koreader-companion-dev:34.0.2
     depends_on:
       db:
         condition: service_healthy

@@ -58,6 +58,13 @@ $books = [
         'rgb'         => [0x7a, 0x27, 0x2c],
     ],
     [
+        'file'   => 'omelette-comics-001.cbz',
+        'title'  => 'Omelette Comics #1',
+        'author' => 'International Omelette',
+        'rgb'    => [0x2c, 0x5f, 0x2e],
+        'pages'  => 3,
+    ],
+    [
         'file'     => 'dev-stack-handbook.pdf',
         'title'    => 'The Dev Stack Handbook',
         'author'   => 'International Omelette',
@@ -70,6 +77,8 @@ foreach ($books as $b) {
     $path = rtrim($out, '/') . '/' . $b['file'];
     if (str_ends_with($b['file'], '.epub')) {
         write_epub($path, $b);
+    } elseif (str_ends_with($b['file'], '.cbz')) {
+        write_cbz($path, $b);
     } else {
         write_pdf($path, $b);
     }
@@ -195,6 +204,31 @@ function write_epub(string $path, array $b): void {
 }
 
 /** PDF literal strings are ASCII; escape parentheses and backslashes. */
+/**
+ * Comic archive: numbered page images, deliberately written to the zip in
+ * REVERSE order so the provider has to sort them. Archive order alone would
+ * hand back the last page as the cover.
+ */
+function write_cbz(string $path, array $b): void {
+    @unlink($path);
+    $zip = new ZipArchive();
+    if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException("cannot create $path");
+    }
+
+    $pages = $b['pages'] ?? 3;
+    for ($i = $pages; $i >= 1; $i--) {
+        $label = $i === 1 ? $b['title'] : 'Page ' . $i;
+        // Single-digit names on purpose: natural sort must keep 2 before 10.
+        $zip->addFromString(sprintf('page%d.jpg', $i), cover_jpeg($label, $b['author'], $b['rgb']));
+    }
+    // Noise a real archive would carry, which must not be mistaken for page one.
+    $zip->addFromString('__MACOSX/._page1.jpg', 'resource fork junk');
+    $zip->addFromString('ComicInfo.xml', '<?xml version="1.0"?><ComicInfo><Series>'
+        . xml($b['title']) . '</Series></ComicInfo>');
+    $zip->close();
+}
+
 function pdf_str(string $s): string {
     $s = (string) preg_replace('/[^\x20-\x7E]/', '', $s);
     return addcslashes($s, "()\\");
