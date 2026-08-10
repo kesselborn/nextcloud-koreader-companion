@@ -6,7 +6,6 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeDeletedEvent;
 use OCP\Config\IUserConfig;
-use OCP\IUserSession;
 use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
@@ -14,21 +13,21 @@ use Psr\Log\LoggerInterface;
  * Listens for file deletion events to clean up related database records
  * when ebook files are deleted from the filesystem
  */
+/**
+ * @template-implements IEventListener<NodeDeletedEvent>
+ */
 class FileDeleteListener implements IEventListener {
 
     private $config;
-    private $userSession;
     private $db;
     private LoggerInterface $logger;
 
     public function __construct(
         IUserConfig $config,
-        IUserSession $userSession,
         IDBConnection $db,
         LoggerInterface $logger
     ) {
         $this->config = $config;
-        $this->userSession = $userSession;
         $this->db = $db;
         $this->logger = $logger;
     }

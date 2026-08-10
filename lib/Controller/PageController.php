@@ -167,72 +167,6 @@ class PageController extends Controller {
         ]);
     }
 
-
-
-    private function addProgressToBooks($books, $userId) {
-        // Get all progress data for this user
-        $qb = $this->db->getQueryBuilder();
-        $result = $qb->select('*')
-            ->from('koreader_sync_progress')
-            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
-            ->executeQuery();
-
-        $progressData = [];
-        while ($row = $result->fetch()) {
-            $progressData[$row['document_hash']] = $row;
-        }
-        $result->closeCursor();
-
-        // Add progress to each book
-        return array_map(function($book) use ($progressData) {
-            $book['progress'] = null;
-            
-            // Check if this is a special KOReader hash mapping
-            if (strpos($book['path'], 'KOREADER_HASH_') === 0) {
-                $koreaderHash = substr($book['path'], strlen('KOREADER_HASH_'));
-                if (isset($progressData[$koreaderHash])) {
-                    $progress = $progressData[$koreaderHash];
-                    $book['progress'] = [
-                        'percentage' => floatval($progress['percentage']) * 100, // Convert decimal to percentage
-                        'device' => $progress['device'],
-                        'device_id' => $progress['device_id'],
-                        'updated_at' => $progress['updated_at']
-                    ];
-                    return $book;
-                }
-            }
-            
-            // Try standard hash strategies to match progress data
-            $hashCandidates = [
-                md5($book['path']), // Current path
-                md5(basename($book['path'])), // Just filename
-                md5('/' . basename($book['path'])), // Filename with leading slash
-            ];
-            
-            // Also try variations based on book title
-            if (isset($book['title'])) {
-                $filename = $book['title'] . '.epub';
-                $hashCandidates[] = md5($filename);
-                $hashCandidates[] = md5('/' . $filename);
-            }
-            
-            foreach ($hashCandidates as $hash) {
-                if (isset($progressData[$hash])) {
-                    $progress = $progressData[$hash];
-                    $book['progress'] = [
-                        'percentage' => floatval($progress['percentage']) * 100, // Convert decimal to percentage
-                        'device' => $progress['device'],
-                        'device_id' => $progress['device_id'],
-                        'updated_at' => $progress['updated_at']
-                    ];
-                    break; // Found a match, stop trying
-                }
-            }
-            
-            return $book;
-        }, $books);
-    }
-
     #[NoAdminRequired]
     public function uploadBook() {
         try {
@@ -578,8 +512,6 @@ class PageController extends Controller {
             ]);
         }
     }
-
-
 
     /**
      * Find a file by its path within a folder (recursive search)

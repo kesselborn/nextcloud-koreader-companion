@@ -8,6 +8,9 @@ use OCP\Files\Events\Node\NodeCreatedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
 use OCP\Config\IUserConfig;
 
+/**
+ * @template-implements IEventListener<NodeCreatedEvent|NodeWrittenEvent>
+ */
 class FileCreationListener implements IEventListener {
 
     private $bookService;
