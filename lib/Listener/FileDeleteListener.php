@@ -1,7 +1,9 @@
 <?php
 namespace OCA\KoreaderCompanion\Listener;
 
+use OCA\KoreaderCompanion\BackgroundJob\ExtractMetadataJob;
 use OCA\KoreaderCompanion\Service\BookService;
+use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeDeletedEvent;
@@ -25,7 +27,8 @@ class FileDeleteListener implements IEventListener {
     public function __construct(
         IUserConfig $config,
         IDBConnection $db,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        private IJobList $jobList
     ) {
         $this->config = $config;
         $this->db = $db;
@@ -54,6 +57,14 @@ class FileDeleteListener implements IEventListener {
 
         $fileId = $node->getId();
         $this->cleanupFileReferences($fileId, $userId, $node->getPath());
+
+        // Drop the extraction job too, if one is still queued. It would run,
+        // find the file gone and no-op -- harmless, but it leaves rows in oc_jobs
+        // for work that can never happen, and on a busy instance those accumulate.
+        $this->jobList->remove(ExtractMetadataJob::class, [
+            'fileId' => $fileId,
+            'userId' => $userId,
+        ]);
     }
 
     private function isEbookInBooksFolder($node): bool {
