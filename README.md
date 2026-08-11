@@ -28,13 +28,39 @@ Feel free to use, fork, or contribute, but please understand the limitations.
 
 ## Requirements
 
-- Nextcloud 31
-- PHP 8.0+
+- Nextcloud 34
+- PHP 8.2+
+- **Working background jobs** — see below
 
-> **Migration in progress.** The app does not currently run on Nextcloud 33 or 34 — jQuery was dropped
-> from the server bundle in NC 33, and several APIs it calls were removed in NC 34. See
-> [`docs/nc34-audit.html`](docs/nc34-audit.html) for the version-pinned findings and `tasks.md` for the
-> plan.
+> The Nextcloud 34 migration is complete. Nextcloud 31 and earlier are no longer supported: the
+> frontend was rewritten off jQuery, which NC 33 dropped, and onto APIs that only exist from 34.
+> [`docs/nc34-audit.html`](docs/nc34-audit.html) records what broke and why;
+> [`docs/security-audit.html`](docs/security-audit.html) covers running this on a public instance.
+
+### Background jobs are not optional
+
+Metadata extraction runs in a background job. When a file arrives *outside* the app's own upload form
+— dropped into the eBooks folder from the Files app, the desktop client, or WebDAV — the app records
+the book immediately and queues the extraction, because it cannot read the file inside the upload's
+own write transaction.
+
+**If background jobs are not running, that extraction never happens.** Books stay listed under their
+filename with no author, marked as still being processed.
+
+Check the mode, and prefer system cron:
+
+```bash
+occ background:cron        # recommended; needs a real crontab entry
+```
+
+With stock cron (every 5 minutes) a book dropped into the folder shows a filename-derived title for
+up to five minutes. For lower latency run `occ background-job:worker` as a long-running service.
+There is no HTTP endpoint that can be called to run a specific job on demand — `cron.php` over HTTP
+does nothing at all when the instance uses system cron, and otherwise runs whatever job happens to be
+next globally.
+
+If you would rather not wait, the library shows an **Extract metadata now** button whenever any book
+is still pending; it does the extraction in the request instead.
 
 ## Local development
 
@@ -76,8 +102,16 @@ the browser may hold a stale copy. Keep DevTools "Disable cache" on, or hard-rel
 `make seed` generates two EPUBs (with embedded covers and full Dublin Core metadata) and a PDF, then
 uploads them over **WebDAV**. That is deliberate: metadata extraction hangs off `NodeCreatedEvent` /
 `NodeWrittenEvent`, which `occ files:scan` does not dispatch — so copying files into the data directory
-would leave the metadata table empty. Drop your own `.epub` / `.pdf` / `.cbr` / `.mobi` files into
+would leave the metadata table empty. Drop your own `.epub` / `.pdf` / `.cbr` / `.cbz` files into
 `dev/fixtures/` and they will be uploaded too.
+
+The listener only records the book and queues the extraction, so `make seed` drains the job queue
+before printing its summary. The stack also runs a `cron` sidecar that ticks every 30 seconds, which
+is what processes anything you add afterwards. To drain it yourself:
+
+```bash
+make cron     # run the background job queue once
+```
 
 ### Translations
 
