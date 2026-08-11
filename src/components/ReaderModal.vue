@@ -177,6 +177,24 @@ export default {
 					height: '100%',
 					flow: 'paginated',
 					spread: 'auto',
+					// SECURITY -- load-bearing, do not flip to true.
+					//
+					// An EPUB is a zip of arbitrary XHTML, and it is attacker-supplied:
+					// anyone who can put a file in a user's library controls it. Three
+					// things keep that content from executing in the Nextcloud origin,
+					// and this is one:
+					//   1. epub.js sets iframe.sandbox = "allow-same-origin" and only
+					//      appends "allow-scripts" when this flag is true
+					//      (epubjs/lib/managers/views/iframe.js)
+					//   2. this flag, false
+					//   3. the page CSP allows blob: for frames but never for scripts
+					//      (PageController::index) -- blob: documents inherit the
+					//      parent CSP, so a sandbox regression alone is not enough
+					//
+					// Setting this true would turn any uploaded book into same-origin
+					// script execution against the reader's session. When bumping
+					// epubjs, re-check its sandbox defaults in that file: a change there
+					// silently removes layer 1. See docs/security-audit.html.
 					allowScriptedContent: false,
 				}))
 				this.rendition.themes.fontSize(`${this.fontSize}%`)

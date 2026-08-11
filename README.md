@@ -130,6 +130,22 @@ is out of date with the sources.
 Adding a language means one line in `LANGUAGES` in `dev/l10n-extract.mjs`, with
 that language's gettext plural form.
 
+### Upgrading epub.js — read this first
+
+The in-browser reader renders attacker-supplied XHTML (anyone who can put a file in a user's library
+controls it) inside the Nextcloud origin. Three independent things stop that content executing:
+
+1. epub.js sets `iframe.sandbox = "allow-same-origin"` and only adds `allow-scripts` when
+   `allowScriptedContent` is true — see `lib/managers/views/iframe.js` in the package
+2. `ReaderModal.vue` passes `allowScriptedContent: false`
+3. the page CSP allows `blob:` for frames but never for scripts (`PageController::index`); blob:
+   documents inherit the parent CSP, so a sandbox regression alone is not enough
+
+**When bumping `epubjs`, re-check point 1 in the new version.** A change to its sandbox defaults
+removes one layer silently, with no test failure and nothing visible in the UI. Never set
+`allowScriptedContent: true`. Full reasoning in
+[`docs/security-audit.html`](docs/security-audit.html).
+
 ### Comparing against Nextcloud 31
 
 To see what the current breakage looks like against a version the app still supports:
