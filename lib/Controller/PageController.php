@@ -96,7 +96,10 @@ class PageController extends Controller {
             // The sort parameter was read nowhere: this passed a hardcoded 'title'
             // and the search path hardcoded its own ORDER BY, so the sort control
             // in the UI had no effect at all. BookService allow-lists the value.
-            $sort = (string)$this->request->getParam('sort', 'title');
+            //
+            // Defaults to 'updated' to match the UI's own default. OPDS keeps its
+            // title default -- catalogue clients expect alphabetical.
+            $sort = (string)$this->request->getParam('sort', 'updated');
 
             // For AJAX requests, skip metadata updates (performance optimization)
             // Metadata is updated on initial page load and file uploads

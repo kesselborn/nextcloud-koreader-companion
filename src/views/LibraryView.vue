@@ -125,9 +125,10 @@ export default {
 			books: [],
 			page: 1,
 			query: '',
-			// The backend has supported these all along; the old UI never sent a
-			// sort parameter and instead re-sorted whatever rows were in the DOM.
-			sort: 'title',
+			// Last updated by default: what you were reading most recently is what
+			// you are most likely to want next, and it counts progress pushed from a
+			// device, not just metadata edits.
+			sort: 'updated',
 			loading: false,
 			extracting: false,
 			hasMore: true,
@@ -143,10 +144,10 @@ export default {
 		},
 		sortOptions() {
 			return [
+				{ value: 'updated', label: t('koreader_companion', 'Sort by last updated') },
 				{ value: 'title', label: t('koreader_companion', 'Sort by title') },
 				{ value: 'author', label: t('koreader_companion', 'Sort by author') },
 				{ value: 'recent', label: t('koreader_companion', 'Sort by date added') },
-				{ value: 'updated', label: t('koreader_companion', 'Sort by last updated') },
 				{ value: 'publication_date', label: t('koreader_companion', 'Sort by publication date') },
 			]
 		},
