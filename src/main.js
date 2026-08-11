@@ -5,8 +5,8 @@ import App from './App.vue'
 
 const app = createApp(App)
 
-// Nextcloud convention: expose the translation helpers as globals so templates
-// can call t('koreader_companion', '...') without importing them everywhere.
+// Nextcloud convention: expose the translation helpers as globals so component
+// templates can call them without importing them in every file.
 app.config.globalProperties.t = t
 app.config.globalProperties.n = n
 

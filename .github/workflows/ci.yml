@@ -72,6 +72,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Translation files are generated from the t()/n() calls in the sources, so
+      # a new string without a refresh means it ships untranslated in every
+      # language.
+      - name: Check l10n is in sync with the sources
+        run: node dev/l10n-extract.mjs --check
+
       # The bundles are committed because the app store tarball has no build
       # step. If a source change lands without a rebuild, the shipped JS is
       # stale -- so fail loudly rather than shipping a mismatch.

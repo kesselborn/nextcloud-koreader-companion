@@ -79,6 +79,23 @@ uploads them over **WebDAV**. That is deliberate: metadata extraction hangs off 
 would leave the metadata table empty. Drop your own `.epub` / `.pdf` / `.cbr` / `.mobi` files into
 `dev/fixtures/` and they will be uploaded too.
 
+### Translations
+
+Interface strings go through Nextcloud's l10n system. `l10n/de.json` and
+`l10n/de.js` are generated from the `t()` / `n()` calls in `src/`, so after adding
+or changing a string:
+
+```bash
+make l10n     # refresh l10n/, keeping existing translations
+```
+
+New strings arrive untranslated (equal to the English source) and can then be
+filled in. English needs no file — it is the source language. CI fails if `l10n/`
+is out of date with the sources.
+
+Adding a language means one line in `LANGUAGES` in `dev/l10n-extract.mjs`, with
+that language's gettext plural form.
+
 ### Comparing against Nextcloud 31
 
 To see what the current breakage looks like against a version the app still supports:

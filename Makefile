@@ -34,7 +34,7 @@ BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .PHONY: help dev up down logs occ shell shell-www reset seed provision test \
         composer install clean appstore sign release nc31-up nc31-down nc31-provision \
-        mysql-up mysql-down mysql-provision npm-install frontend watch
+        mysql-up mysql-down mysql-provision npm-install frontend watch l10n
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -129,6 +129,9 @@ npm-install: ## Install frontend dependencies
 frontend: ## Build the Vue bundle into js/ and css/
 	npm run build
 
+l10n: ## Refresh l10n/ from the t()/n() calls in the sources
+	node dev/l10n-extract.mjs
+
 watch: ## Rebuild the frontend on change
 	npm run watch
 
@@ -159,6 +162,7 @@ appstore: clean ## Build the app store tarball
 	cp -r css       "$(source_dir)/$(app_name)/"
 	cp -r img       "$(source_dir)/$(app_name)/"
 	cp -r js        "$(source_dir)/$(app_name)/"
+	cp -r l10n      "$(source_dir)/$(app_name)/"
 	cp -r lib       "$(source_dir)/$(app_name)/"
 	cp -r templates "$(source_dir)/$(app_name)/"
 	cp -r vendor    "$(source_dir)/$(app_name)/"

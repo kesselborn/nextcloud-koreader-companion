@@ -154,6 +154,22 @@ Moved out of Phase 1:
       metadata saved, and the sync password write produced `flags=1` (FLAG_SENSITIVE) with an encrypted
       value, closing the item 2.15 left open. Throttling verified earlier (401×10 → 429).
 
+## Phase 6 — i18n (side quest)
+
+- [x] 6.1 `l10n/de.json` + `l10n/de.js` generated from the 93 `t()`/`n()` calls; English is the
+      source language so needs no file
+- [x] 6.2 `dev/l10n-extract.mjs` extractor — merges, preserving existing translations; `--check` mode
+      wired into CI so a new string cannot ship untranslated unnoticed
+- [x] 6.3 Full German translation, incl. both plural strings
+- [x] 6.4 `l10n/` added to the appstore tarball — the Makefile copies an allow-list, so translations
+      would otherwise never have shipped
+- [x] 6.5 **Verify**: server-side `IL10N` returns German; browser renders German nav, labels and
+      `5 Bücher`. Plural keys must be `_singular_::_plural_`, not the bare singular — using the
+      singular silently falls back to the English plural (found by reading `translatePlural` in
+      `@nextcloud/l10n`)
+- [ ] 6.6 Translate backend JSON error strings — only `SettingsController::setFolder`'s message is
+      surfaced in the UI today; the rest are replaced by frontend strings
+
 ## Phase 5 — Findings deck (done first, on request)
 
 - [x] 5.1 Build the single-page HTML deck → `docs/nc34-audit.html`
