@@ -3,6 +3,7 @@ namespace OCA\KoreaderCompanion\Controller;
 
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\BookService;
+use OCA\KoreaderCompanion\Service\SyncPasswordService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -18,6 +19,30 @@ use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 
 class KoreaderController extends Controller {
+
+    /**
+     * How many books one sync request may hash while looking for a document.
+     *
+     * Auto-indexing used to walk the whole library and open every file, so a
+     * single PUT carrying an unrecognised hash cost work proportional to the
+     * library -- and an attacker could repeat it with random hashes. KOReader
+     * retries, so a document beyond this bound still gets found across a few
+     * syncs; `occ koreader:generate-hashes` maps the rest up front.
+     */
+    private const AUTO_INDEX_MAX_FILES = 200;
+
+    /**
+     * KOReader document hashes are MD5 hex. Anything else is not a hash we could
+     * ever match, so it is rejected rather than stored.
+     */
+    private const DOCUMENT_HASH_LENGTH = 32;
+
+    /**
+     * Ceiling on stored progress rows per user. Unknown documents are recorded
+     * on purpose (KOReader syncs books it has that the server has not indexed
+     * yet), which without a cap is an unbounded attacker-controlled write.
+     */
+    private const MAX_PROGRESS_ROWS_PER_USER = 5000;
 
     private $db;
     private $userSession;
@@ -38,7 +63,8 @@ class KoreaderController extends Controller {
         DocumentHashGenerator $hashGenerator,
         BookService $bookService,
         IRootFolder $rootFolder,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        private SyncPasswordService $syncPasswords
     ) {
         parent::__construct($AppName, $request);
         $this->db = $db;
@@ -157,7 +183,16 @@ class KoreaderController extends Controller {
         if (empty($document)) {
             return $this->createKoreaderResponse(['error' => 'Document hash required'], 400);
         }
-        
+
+        // Validated, not just non-empty. KOReader document hashes are MD5 hex; the
+        // column used to accept any string of any shape, so the row key was fully
+        // attacker-controlled.
+        if (!is_string($document)
+            || strlen($document) !== self::DOCUMENT_HASH_LENGTH
+            || !ctype_xdigit($document)) {
+            return $this->createKoreaderResponse(['error' => 'Malformed document hash'], 400);
+        }
+
         // Try to find the document by hash to ensure it exists and create mapping if needed
         $bookInfo = $this->findBookByHash($document, $syncUser['id']);
         if (!$bookInfo) {
@@ -166,12 +201,22 @@ class KoreaderController extends Controller {
             if (!$indexed) {
                 $this->logUnknownDocument($document, $syncUser['id']);
                 // Still save the progress even if we don't know the document
-                // This maintains compatibility with existing KOReader behavior
+                // This maintains compatibility with existing KOReader behavior --
+                // but only up to a ceiling, since unknown hashes are exactly what
+                // an attacker can mint for free.
+                // Only new rows are capped -- updating progress on a document
+                // already being tracked must keep working at any library size.
+                if ($this->getDocumentProgress($syncUser['id'], $document) === null
+                    && $this->countProgressRows($syncUser['id']) >= self::MAX_PROGRESS_ROWS_PER_USER) {
+                    return $this->createKoreaderResponse([
+                        'message' => 'Too many tracked documents',
+                    ], 507);
+                }
             }
         }
-        
+
         $this->saveDocumentProgress($syncUser['id'], $document, $progress, $percentage, $device, $deviceId);
-        
+
         return $this->createKoreaderResponse(['message' => 'Progress updated']);
     }
 
@@ -190,30 +235,20 @@ class KoreaderController extends Controller {
             return false;
         }
 
-        // Check if user exists in Nextcloud
-        $user = $this->userManager->get($authUser);
-        if (!$user) {
+        // KOReader always sends an MD5 hex digest. Anything else could never
+        // match, so it is rejected before any lookup.
+        if (strlen($authKey) !== self::DOCUMENT_HASH_LENGTH || !ctype_xdigit($authKey)) {
             return false;
         }
 
-        // Get user's stored KOReader sync password MD5 hash
-        $storedMd5Hash = $this->config->getValueString($authUser, 'koreader_companion', 'koreader_sync_password', '');
+        // The user lookup no longer short-circuits. Returning early for an unknown
+        // account made that response measurably faster than a wrong-key response,
+        // which is enough to enumerate usernames -- so verification always runs,
+        // against a dummy digest when there is nothing real to check.
+        $user = $this->userManager->get($authUser);
+        $verified = $this->syncPasswords->verify($authUser, $authKey);
 
-        if (empty($storedMd5Hash)) {
-            return false; // No sync password set for this user
-        }
-
-        // KOReader sends MD5 hash of password in x-auth-key header
-        // Compare directly with stored MD5 hash
-        $authSuccess = false;
-
-        if (strlen($authKey) === 32 && ctype_xdigit($authKey)) {
-            // hash_equals, not ===, so the comparison does not leak the stored
-            // hash one byte at a time through response timing.
-            $authSuccess = hash_equals($storedMd5Hash, $authKey);
-        }
-
-        if (!$authSuccess) {
+        if (!$verified || $user === null) {
             return false;
         }
 
@@ -259,6 +294,18 @@ class KoreaderController extends Controller {
         return $progress ?: null;
     }
     
+    private function countProgressRows($userId): int {
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select($qb->func()->count('*', 'rows'))
+            ->from('koreader_sync_progress')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->executeQuery();
+        $count = (int)$result->fetchOne();
+        $result->closeCursor();
+
+        return $count;
+    }
+
     private function saveDocumentProgress($userId, $document, $progress, $percentage, $device, $deviceId) {
         $qb = $this->db->getQueryBuilder();
         
@@ -313,7 +360,7 @@ class KoreaderController extends Controller {
             $result->closeCursor();
 
             if ($row) {
-                $this->logger->info('Found book by hash in mapping table', [
+                $this->logger->debug('Found book by hash in mapping table', [
                     'hash' => $documentHash,
                     'user' => $userId,
                     'title' => $row['title'],
@@ -323,7 +370,7 @@ class KoreaderController extends Controller {
             }
 
             // Not found in mapping table - let's check if we can find it by scanning books
-            $this->logger->info('Book not found in hash mapping table', [
+            $this->logger->debug('Book not found in hash mapping table', [
                 'hash' => $documentHash,
                 'user' => $userId
             ]);
@@ -349,7 +396,7 @@ class KoreaderController extends Controller {
      */
     private function tryAutoIndex(string $documentHash, string $userId): bool {
         try {
-            $this->logger->info('Attempting auto-index for unknown document', [
+            $this->logger->debug('Attempting auto-index for unknown document', [
                 'hash' => $documentHash,
                 'user' => $userId
             ]);
@@ -357,7 +404,7 @@ class KoreaderController extends Controller {
             // Set user context for BookService
             $user = $this->userManager->get($userId);
             if (!$user) {
-                $this->logger->info('Auto-index failed: user not found', ['user' => $userId]);
+                $this->logger->debug('Auto-index failed: user not found', ['user' => $userId]);
                 return false;
             }
 
@@ -365,6 +412,18 @@ class KoreaderController extends Controller {
 
             // Get all books for this user
             $books = $this->bookService->getBooks();
+
+            // Bounded. Every iteration opens a file, so an unbounded loop here let
+            // one PUT with a random hash cost work proportional to the whole
+            // library -- repeatable, and cheap for the caller.
+            if (count($books) > self::AUTO_INDEX_MAX_FILES) {
+                $this->logger->debug('Auto-index stopping early: library larger than the per-request bound', [
+                    'app' => 'koreader_companion',
+                    'books' => count($books),
+                    'bound' => self::AUTO_INDEX_MAX_FILES,
+                ]);
+                $books = array_slice($books, 0, self::AUTO_INDEX_MAX_FILES);
+            }
 
             // Check each book's hashes
             foreach ($books as $book) {
@@ -387,7 +446,7 @@ class KoreaderController extends Controller {
                     if ($binaryHash === $documentHash || $filenameHash === $documentHash) {
                         $hashType = ($binaryHash === $documentHash) ? 'binary' : 'filename';
                         
-                        $this->logger->info('Auto-indexing document found match', [
+                        $this->logger->debug('Auto-indexing document found match', [
                             'hash' => $documentHash,
                             'user' => $userId,
                             'file' => $file->getName(),
@@ -407,7 +466,7 @@ class KoreaderController extends Controller {
                     }
                     
                 } catch (\Exception $e) {
-                    $this->logger->info('Error processing book during auto-index', [
+                    $this->logger->debug('Error processing book during auto-index', [
                         'book_id' => $book['id'],
                         'error' => $e->getMessage()
                     ]);
@@ -415,7 +474,7 @@ class KoreaderController extends Controller {
                 }
             }
 
-            $this->logger->info('Auto-index completed: no matching document found', [
+            $this->logger->debug('Auto-index completed: no matching document found', [
                 'hash' => $documentHash,
                 'user' => $userId,
                 'books_checked' => count($books)
@@ -513,7 +572,7 @@ class KoreaderController extends Controller {
                 ])
                 ->executeStatement();
 
-            $this->logger->info('Created hash mapping entry', [
+            $this->logger->debug('Created hash mapping entry', [
                 'user' => $userId,
                 'hash' => $documentHash,
                 'hash_type' => $hashType,
