@@ -4,6 +4,7 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\FilenameService;
+use OCA\KoreaderCompanion\Service\ReadingProgressService;
 use OCA\KoreaderCompanion\Service\SyncPasswordService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -59,7 +60,8 @@ class PageController extends Controller {
         DocumentHashGenerator $hashGenerator,
         IInitialState $initialState,
         LoggerInterface $logger,
-        private SyncPasswordService $syncPasswords
+        private SyncPasswordService $syncPasswords,
+        private ReadingProgressService $readingProgress
     ) {
         parent::__construct($appName, $request);
         $this->bookService = $bookService;
@@ -508,6 +510,57 @@ class PageController extends Controller {
         } catch (\Exception $e) {
             return $this->internalError('Could not extract metadata', $e);
         }
+    }
+
+    /**
+     * Save a reading position from the in-browser reader.
+     *
+     * Writes to the same table KOReader devices sync against, keyed by the same
+     * document hash, so a position saved here is one a device can pull. The
+     * position itself arrives as a KOReader xpointer -- the browser converts it
+     * from the reader's own CFI -- because a device pulling a CFI would not
+     * understand it.
+     */
+    #[NoAdminRequired]
+    #[UserRateLimit(limit: 60, period: 60)]
+    public function saveProgress($id) {
+        $user = $this->userSession->getUser();
+        if (!$user) {
+            return new JSONResponse(['error' => 'Not logged in'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        if (!is_numeric($id)) {
+            return new JSONResponse(['error' => 'Invalid book ID'], Http::STATUS_BAD_REQUEST);
+        }
+
+        $progress = (string)$this->request->getParam('progress', '');
+        if ($progress === '') {
+            return new JSONResponse(['error' => 'Position required'], Http::STATUS_BAD_REQUEST);
+        }
+
+        try {
+            $saved = $this->readingProgress->save(
+                $user->getUID(),
+                (int)$id,
+                $progress,
+                $this->request->getParam('percentage', 0),
+                (string)$this->request->getParam('device', 'Nextcloud Web'),
+                (string)$this->request->getParam('device_id', 'nextcloud-web')
+            );
+        } catch (\Exception $e) {
+            return $this->internalError('Could not save your reading position', $e);
+        }
+
+        if (!$saved) {
+            // No document hash means no device could ever match this book, so
+            // storing the position would put it somewhere nothing reads from.
+            return new JSONResponse(
+                ['error' => 'This book has no sync identity yet'],
+                Http::STATUS_CONFLICT
+            );
+        }
+
+        return new JSONResponse([]);
     }
 
     /**
