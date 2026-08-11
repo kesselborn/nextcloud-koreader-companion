@@ -75,7 +75,7 @@
 			     saving it silently could move where a Kobo resumes. -->
 			<NcDialog
 				v-if="askingToSave"
-				:name="t('koreader_companion', 'Keep this as your place in the book?')"
+				:name="t('koreader_companion', 'Save your place?')"
 				:message="saveDialogMessage"
 				:buttons="saveDialogButtons"
 				@closing="close" />
@@ -201,28 +201,25 @@ export default {
 		},
 
 		/**
-		 * Says what will actually happen: this overwrites the position every other
-		 * device resumes from, which is not obvious from a bare "save?".
+		 * One sentence. "Resume here" carries the consequence -- that the old
+		 * position is replaced -- without spelling out the mechanism.
 		 */
 		saveDialogMessage() {
-			const here = t('koreader_companion', 'You stopped at {percent}%.', { percent: this.percent })
-
-			return this.openedFrom
-				? here + ' ' + t('koreader_companion',
-					'Saving replaces the position from {device}, and your other devices will continue from here.',
-					{ device: this.openedFrom })
-				: here + ' ' + t('koreader_companion',
-					'Your KOReader devices will continue from here.')
+			return t('koreader_companion', 'You are at {percent}%. Your devices will resume here.', {
+				percent: this.percent,
+			})
 		},
 
 		saveDialogButtons() {
+			// Short labels: NcDialog truncates anything longer, and a button that
+			// reads "Continue here on my de..." helps nobody.
 			return [
 				{
-					label: t('koreader_companion', 'Leave it unchanged'),
+					label: t('koreader_companion', 'Not now'),
 					callback: () => this.close(),
 				},
 				{
-					label: t('koreader_companion', 'Continue here on my devices'),
+					label: t('koreader_companion', 'Save'),
 					type: 'primary',
 					disabled: this.saving,
 					callback: () => this.saveAndClose(),
