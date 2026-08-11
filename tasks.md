@@ -504,3 +504,40 @@ processed" was.
       keyboard-reachable and announced as an action. Uses the same query a user could type rather than a
       dedicated author filter, so the box keeps reflecting what is on screen. Verified: clicking
       `Arthur C. Clarke` returns 13 books, including a co-authored one
+
+## Phase 11 — Reading position shared with the web reader
+
+- [x] 11.1 **KOReader ↔ epub.js position conversion** (`src/koreaderPosition.js`). KOReader concatenates
+      the spine into one document, wraps each item in `<DocFragment>` and points with an XPath plus a
+      character offset; epub.js uses CFI. Mapping is `DocFragment[N]` = spine item N−1, remainder an
+      XPath into that item's body. **Verified against a real device position, not assumed**: for a book
+      whose spine item 10 spans 9.41–12.59%, the device reported `DocFragment[10]` at 12.34% and the
+      XPath resolved — the alternative indexing would have placed it before the chapter began
+- [x] 11.2 Opening a book jumps to the device's position; the header names the device it came from.
+      Falls back to percentage when the exact path will not resolve (CoolReader normalises markup, so
+      its paths do not always survive the round trip)
+- [x] 11.3 Closing offers to save the position back — asked, never assumed, since the row is shared with
+      real devices and a silent write would move where a Kobo resumes. No prompt when the position
+      cannot be expressed in KOReader's terms
+- [x] 11.4 `PUT /books/{id}/progress` + `ReadingProgressService`, writing to the same table and hash the
+      sync API uses. Computes and records the binary hash if the book has never been synced, so a device
+      opening it later finds the progress already there. Value normalisation is now shared with
+      `KoreaderController` so the two write paths cannot disagree about column limits again
+- [x] 11.5 **Verified end to end in a real browser**: opened *Born to Run* at Readest's position, paged
+      on, saved, and the stored row is `/body/DocFragment[12]/body/div/p[21]/text()[1].161` — the shape a
+      device emits, including omitting the `[1]` index KOReader leaves off. Reopening showed
+      "Resumed from Nextcloud Web" (exact path, not the percentage fallback)
+- [ ] 11.6 **Untested against real hardware.** The round trip is proven browser-to-browser and the format
+      matches what Readest and kobo_clara emit, but no actual KOReader device has yet been asked to
+      *consume* a position this app wrote. Worth one confirmation before trusting it with a real reading
+      position
+- [ ] 11.7 Precedence is "device position wins over this browser's last local position". If you read in
+      the browser without saving, then reopen, you return to the device's spot. Newest-wins would need a
+      timestamp on the localStorage entry, which it does not have
+
+### Notes for later
+
+- Two gotchas cost real time here and are worth remembering: the epub.js spine is empty until
+  `book.ready` resolves (without awaiting it, every lookup silently fell back to percentage), and
+  `rendition.currentLocation()` is not reliably populated — it is a side effect of the `relocated`
+  event, so take the CFI from the event
