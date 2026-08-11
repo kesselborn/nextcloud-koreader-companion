@@ -10,7 +10,7 @@
 				trailing-button-icon="close"
 				:show-trailing-button="query !== ''"
 				class="library__search"
-				@trailing-button-click="query = ''"
+				@trailing-button-click="clearQuery"
 				@update:model-value="onQueryInput" />
 
 			<NcSelect
@@ -189,6 +189,18 @@ export default {
 		},
 
 		/**
+		 * The clear button only reset the model, so the list kept showing the old
+		 * results until something else triggered a fetch. Cancel any pending
+		 * debounce too, or it fires afterwards and searches for the text just
+		 * cleared.
+		 */
+		clearQuery() {
+			this.query = ''
+			clearTimeout(this.debounce)
+			this.reload()
+		},
+
+		/**
 		 * Re-fetch the pages already on screen without collapsing the list, so a
 		 * pending book resolving in place does not scroll the user to the top.
 		 */
@@ -313,6 +325,36 @@ export default {
 		align-items: center;
 		gap: calc(var(--default-grid-baseline) * 3);
 		margin-block-end: calc(var(--default-grid-baseline) * 4);
+
+		// Nextcloud floats the navigation toggle over the top-left of the content
+		// area whenever the sidebar is collapsed, and it was landing on top of the
+		// search field, clipping the first character. Reserve its width.
+		padding-inline-start: var(--default-clickable-area, 44px);
+
+		// Measured, not guessed. NcTextField ships `margin-block-start: 6px` and
+		// NcSelect ships `margin-block-end: 4px`, so centring aligned their
+		// *margin* boxes and left the visible boxes 5px apart.
+		//
+		// Nested under the toolbar deliberately: NcTextField's own rule is
+		// `.input-field[data-v-…]`, exactly as specific as `.library__search[data-v-…]`
+		// would be, and its stylesheet loads later -- so an equally specific reset
+		// silently loses. This selector carries one more class and wins outright.
+		.library__search,
+		.library__sort {
+			margin-block: 0;
+		}
+
+		// Both controls pinned to one height, nested here for the specificity the
+		// components' own scoped rules otherwise win on.
+		//
+		// 36 rather than --default-clickable-area (34): the select's content is 34
+		// tall, so a 34px box leaves a 32px client area and NcSelect's
+		// `overflow-y: auto` renders that 2px shortfall as a scrollbar.
+		.library__sort :deep(.vs__dropdown-toggle),
+		.library__search :deep(.input-field__main-wrapper) {
+			box-sizing: border-box;
+			min-height: calc(var(--default-clickable-area, 34px) + 2px);
+		}
 	}
 
 	&__search {
@@ -321,19 +363,10 @@ export default {
 	}
 
 	&__sort {
-		flex: 0 0 220px;
-		min-width: 200px;
+		flex: 0 0 260px;
+		min-width: 240px;
 
-		// NcTextField and NcSelect do not agree on their own height, which showed
-		// as one box being visibly taller than the other. Pin both to Nextcloud's
-		// standard control height so they match.
-		:deep(.vs__dropdown-toggle) {
-			min-height: var(--default-clickable-area, 44px);
-		}
-	}
 
-	&__search :deep(input) {
-		height: var(--default-clickable-area, 44px);
 	}
 
 	&__pending-note {
