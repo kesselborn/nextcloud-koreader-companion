@@ -257,6 +257,101 @@ class BookService {
         }
     }
 
+    /**
+     * States for the indexing_state column.
+     */
+    public const STATE_PENDING = 'pending';
+    public const STATE_DONE = 'done';
+
+    /**
+     * Record a book as present without reading its contents.
+     *
+     * Called from the upload event listener, which runs inside the transaction
+     * Nextcloud opened for the write. Everything used here is already on the
+     * Node in memory -- id, path, name, mtime -- so nothing re-reads
+     * oc_filecache. That matters: reading a table the same transaction has
+     * written is what Nextcloud's "dirty table reads" assertion rejects, and it
+     * is why extraction used to fail silently whenever debug was enabled.
+     *
+     * The real metadata arrives later, from ExtractMetadataJob.
+     */
+    public function markFilePending(Node $file, string $userId): void {
+        $fileId = $file->getId();
+        $extension = strtolower(pathinfo($file->getName(), PATHINFO_EXTENSION));
+        $now = date('Y-m-d H:i:s');
+
+        $qb = $this->db->getQueryBuilder();
+        $existing = $qb->select('id')
+            ->from('koreader_metadata')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId)))
+            ->executeQuery();
+        $row = $existing->fetch();
+        $existing->closeCursor();
+
+        if ($row) {
+            $qb = $this->db->getQueryBuilder();
+            $qb->update('koreader_metadata')
+                ->set('indexing_state', $qb->createNamedParameter(self::STATE_PENDING))
+                ->set('file_path', $qb->createNamedParameter($file->getPath()))
+                ->set('updated_at', $qb->createNamedParameter($now))
+                ->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))
+                ->executeStatement();
+            return;
+        }
+
+        // Title falls back to the filename so the row is never blank; the job
+        // overwrites it with the real title.
+        $qb = $this->db->getQueryBuilder();
+        $qb->insert('koreader_metadata')
+            ->values([
+                'user_id' => $qb->createNamedParameter($userId),
+                'file_id' => $qb->createNamedParameter($fileId),
+                'file_path' => $qb->createNamedParameter($file->getPath()),
+                'title' => $qb->createNamedParameter(pathinfo($file->getName(), PATHINFO_FILENAME)),
+                'author' => $qb->createNamedParameter(''),
+                'file_format' => $qb->createNamedParameter($extension),
+                'indexing_state' => $qb->createNamedParameter(self::STATE_PENDING),
+                'created_at' => $qb->createNamedParameter($now),
+                'updated_at' => $qb->createNamedParameter($now),
+            ])
+            ->executeStatement();
+    }
+
+    /**
+     * Extract metadata for one file and mark it done. Runs from the background
+     * job, outside any upload transaction, so reading the file is safe here.
+     */
+    public function indexFile(Node $file, string $userId): void {
+        $fileId = $file->getId();
+
+        // Deliberately not ensureFileInDatabase(): that skips a row whose
+        // updated_at is newer than the file's mtime, and markFilePending() has
+        // just stamped updated_at to now -- so it would decide there was nothing
+        // to do and the book would sit there titled after its filename forever.
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select('id')
+            ->from('koreader_metadata')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId)))
+            ->executeQuery();
+        $row = $result->fetch();
+        $result->closeCursor();
+
+        if ($row) {
+            $this->updateFileMetadata($file, $userId, $row['id']);
+        } else {
+            $this->insertFileMetadata($file, $userId);
+        }
+
+        $qb = $this->db->getQueryBuilder();
+        $qb->update('koreader_metadata')
+            ->set('indexing_state', $qb->createNamedParameter(self::STATE_DONE))
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId)))
+            ->executeStatement();
+    }
+
     public function syncFileMetadata(Node $file, string $userId): void {
         $this->ensureFileInDatabase($file, $userId);
     }
@@ -432,6 +527,7 @@ class BookService {
                 'publication_date' => $row['publication_date'] ?? '',
                 'identifier' => '', // Not stored in current schema
                 'cover' => null, // Handled dynamically
+                'indexing_state' => $row['indexing_state'] ?? self::STATE_DONE,
                 'series' => $row['series'] ?? '',
                 'issue' => $row['issue'] ?? '',
                 'volume' => $row['volume'] ?? '',
@@ -483,6 +579,7 @@ class BookService {
             'publication_date' => '',
             'identifier' => '',
             'cover' => null,
+            'indexing_state' => self::STATE_DONE,
             // Add comic book specific fields
             'series' => '',
             'issue' => '',
@@ -709,11 +806,20 @@ class BookService {
                 $userId = $user->getUID();
             }
 
+            // Exclude pending rows. A pending row is the placeholder the upload
+            // listener writes before queueing extraction -- its title is just the
+            // filename. Treating that as stored user metadata made extractMetadata
+            // skip parsing the file entirely, so a queued book kept its filename
+            // as its title forever.
             $qb = $this->db->getQueryBuilder();
             $result = $qb->select('*')
                 ->from('koreader_metadata')
                 ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
                 ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($file->getId())))
+                ->andWhere($qb->expr()->neq(
+                    'indexing_state',
+                    $qb->createNamedParameter(self::STATE_PENDING)
+                ))
                 ->executeQuery();
 
             $storedMetadata = $result->fetch();

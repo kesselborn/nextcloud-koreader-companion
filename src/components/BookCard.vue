@@ -10,6 +10,13 @@
 				@error="coverFailed = true">
 			<span v-else class="book__format">{{ book.format.toUpperCase() }}</span>
 
+			<!-- Pending means a background job has not extracted metadata yet, so
+			     the title is still just the filename. Say so plainly. -->
+			<div v-if="pending" class="book__pending">
+				<NcLoadingIcon :size="24" />
+				<span>{{ t('koreader_companion', 'Reading details…') }}</span>
+			</div>
+
 			<!-- Progress sits on the cover so the grid stays scannable. -->
 			<div v-if="progress" class="book__progress" :title="progressTitle">
 				<div class="book__progress-fill" :style="{ width: percentage + '%' }" />
@@ -39,7 +46,10 @@
 
 		<div class="book__meta">
 			<span class="book__title" :title="book.title">{{ book.title }}</span>
-			<span class="book__author">{{ book.author || t('koreader_companion', 'Unknown author') }}</span>
+			<span v-if="pending" class="book__author book__author--pending">
+				{{ t('koreader_companion', 'Queued for processing') }}
+			</span>
+			<span v-else class="book__author">{{ book.author || t('koreader_companion', 'Unknown author') }}</span>
 			<span v-if="progress" class="book__sync">
 				{{ percentageLabel }}
 				<span v-if="book.progress.device" class="book__device">· {{ book.progress.device }}</span>
@@ -54,6 +64,7 @@ import { generateUrl } from '@nextcloud/router'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActionLink from '@nextcloud/vue/components/NcActionLink'
 import NcActions from '@nextcloud/vue/components/NcActions'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import Download from 'vue-material-design-icons/Download.vue'
 import FolderOutline from 'vue-material-design-icons/FolderOutline.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
@@ -74,6 +85,7 @@ export default {
 		NcActionButton,
 		NcActionLink,
 		NcActions,
+		NcLoadingIcon,
 		Pencil,
 	},
 
@@ -93,7 +105,15 @@ export default {
 	},
 
 	computed: {
+		pending() {
+			return this.book.indexing_state === 'pending'
+		},
 		hasCover() {
+			// A pending book has no preview yet either -- the job has not run, so
+			// asking for one would just 404 and flash a broken image.
+			if (this.pending) {
+				return false
+			}
 			return !this.coverFailed && COVER_FORMATS.includes((this.book.format || '').toLowerCase())
 		},
 		cover() {
@@ -164,6 +184,25 @@ export default {
 		font-weight: bold;
 		letter-spacing: .08em;
 		color: var(--color-text-maxcontrast);
+	}
+
+	&__pending {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: calc(var(--default-grid-baseline) * 2);
+		background-color: var(--color-background-hover);
+		color: var(--color-text-maxcontrast);
+		font-size: .8em;
+		text-align: center;
+		padding: calc(var(--default-grid-baseline) * 2);
+	}
+
+	&__author--pending {
+		font-style: italic;
 	}
 
 	&__progress {

@@ -26,6 +26,16 @@
 			<span class="library__count">
 				{{ n('koreader_companion', '%n book', '%n books', books.length) }}
 			</span>
+
+			<NcNoteCard
+				v-if="pendingCount > 0"
+				type="info"
+				class="library__pending-note">
+				{{ n('koreader_companion',
+					'%n book is being processed. Its details will appear here shortly.',
+					'%n books are being processed. Their details will appear here shortly.',
+					pendingCount) }}
+			</NcNoteCard>
 		</div>
 
 		<NcEmptyContent
@@ -60,6 +70,7 @@
 import { showError } from '@nextcloud/dialogs'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import BookOpenVariant from 'vue-material-design-icons/BookOpenVariantOutline.vue'
@@ -77,6 +88,7 @@ export default {
 		BookOpenVariant,
 		NcEmptyContent,
 		NcLoadingIcon,
+		NcNoteCard,
 		NcSelect,
 		NcTextField,
 	},
@@ -95,10 +107,14 @@ export default {
 			hasMore: true,
 			observer: null,
 			debounce: null,
+			pendingPoll: null,
 		}
 	},
 
 	computed: {
+		pendingCount() {
+			return this.books.filter(book => book.indexing_state === 'pending').length
+		},
 		sortOptions() {
 			return [
 				{ value: 'title', label: t('koreader_companion', 'Title') },
@@ -116,6 +132,22 @@ export default {
 	beforeUnmount() {
 		this.observer?.disconnect()
 		clearTimeout(this.debounce)
+		clearInterval(this.pendingPoll)
+	},
+
+	watch: {
+		// Extraction happens in a background job, so a freshly uploaded book stays
+		// 'pending' until cron picks it up. Poll while any book is waiting so the
+		// list fills itself in, and stop as soon as none are -- no timer ticking
+		// away on an idle library.
+		pendingCount(count) {
+			if (count > 0 && !this.pendingPoll) {
+				this.pendingPoll = setInterval(() => this.refreshInPlace(), 5000)
+			} else if (count === 0 && this.pendingPoll) {
+				clearInterval(this.pendingPoll)
+				this.pendingPoll = null
+			}
+		},
 	},
 
 	updated() {
@@ -126,6 +158,27 @@ export default {
 		onQueryInput() {
 			clearTimeout(this.debounce)
 			this.debounce = setTimeout(() => this.reload(), 300)
+		},
+
+		/**
+		 * Re-fetch the pages already on screen without collapsing the list, so a
+		 * pending book resolving in place does not scroll the user to the top.
+		 */
+		async refreshInPlace() {
+			const pages = Math.max(1, this.page - 1)
+			try {
+				const batches = await Promise.all(
+					Array.from({ length: pages }, (_, i) => fetchBooks({
+						page: i + 1,
+						query: this.query,
+						sort: this.sort,
+					})),
+				)
+				this.books = batches.flat()
+			} catch (error) {
+				// A failed refresh is not worth interrupting the user; the next
+				// tick tries again.
+			}
 		},
 
 		async reload() {
@@ -194,6 +247,11 @@ export default {
 	&__sort {
 		flex: 0 0 200px;
 		min-width: 180px;
+	}
+
+	&__pending-note {
+		flex: 1 1 100%;
+		margin-block: 0;
 	}
 
 	&__count {
