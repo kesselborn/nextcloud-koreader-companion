@@ -66,9 +66,18 @@ done
 # container, the app is enabled, migrations ran, and the NodeCreatedEvent
 # listener fired with working EPUB/PDF metadata extraction -- none of which
 # involves the app's (currently broken) HTTP layer.
-QUERY='select title, author, language, file_format from oc_koreader_metadata order by id'
+QUERY='select title, author, language, indexing_state, file_format from oc_koreader_metadata order by id'
 
-say "rows in oc_koreader_metadata (written by the NodeCreatedEvent listener):"
+# The listener only records the book and queues ExtractMetadataJob -- it cannot
+# read the file itself, because it runs inside the upload's own write transaction.
+# Drain the queue here so the rows below show real titles instead of filenames.
+# Without this the fixtures sit at indexing_state='pending' until cron runs, which
+# reads as "seeding is broken" when it is only unfinished.
+say "draining the background job queue so metadata extraction completes"
+docker compose exec -T -u www-data "$SERVICE" php -f cron.php >/dev/null 2>&1 \
+  || say "(cron.php failed -- pending rows will stay pending until the cron service catches up)"
+
+say "rows in oc_koreader_metadata (listener recorded, background job extracted):"
 case "$SERVICE" in
   appmysql)
     docker compose exec -T dbmysql mariadb -unextcloud -pnextcloud nextcloud \

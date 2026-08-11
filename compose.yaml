@@ -90,6 +90,48 @@ services:
       # conf.d loads alphabetically, so zz-* overrides the image's own ini files.
       - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
 
+  # Runs the background job queue, which nothing did before.
+  #
+  # The official image has no cron, and backgroundjobs_mode is 'cron', so
+  # cron.php over HTTP is a deliberate no-op. Queued jobs therefore never ran:
+  # every book dropped into the eBooks folder sat at indexing_state='pending'
+  # forever, titled after its filename, and the app looked broken when it was
+  # only unattended.
+  #
+  # Every 30s rather than the stock 5min: this is a dev stack, and waiting five
+  # minutes to see whether extraction worked is how the problem went unnoticed.
+  cron:
+    <<: *nextcloud-common
+    image: koreader-companion-dev:34.0.2
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      <<: *nextcloud-env
+      POSTGRES_HOST: db
+    # Inherited from the anchor, but this container runs no web server, so the
+    # status.php probe would mark it permanently unhealthy.
+    healthcheck:
+      disable: true
+    # Overriding the entrypoint skips the image's privilege drop, so without this
+    # the loop runs as root and every tick dies with "Console has to be executed
+    # with the user that owns the file config/config.php" (uid 0 vs 33).
+    user: "33:33"
+    # cron.php in a loop rather than `background-job:worker`: the worker is
+    # long-lived and holds job state across runs, which is awkward when the app
+    # container is being restarted constantly during development.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          php -f /var/www/html/cron.php >/dev/null 2>&1 || true
+          sleep 30
+        done
+    volumes:
+      - nextcloud_html:/var/www/html
+      - ./:/var/www/html/custom_apps/koreader_companion:cached
+      - ./dev/php/zz-dev.ini:/usr/local/etc/php/conf.d/zz-dev.ini:ro
+
   # ---------------------------------------------------------------------
   # Optional "worked before / breaks now" stack: Nextcloud 31 on :8091.
   #   make nc31-up && make nc31-provision

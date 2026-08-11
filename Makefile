@@ -32,7 +32,7 @@ BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev up down logs occ shell shell-www reset seed provision test \
+.PHONY: help dev up down logs occ cron shell shell-www reset seed provision test \
         composer install clean appstore sign release nc31-up nc31-down nc31-provision \
         mysql-up mysql-down mysql-provision npm-install frontend watch l10n
 
@@ -65,6 +65,10 @@ logs: ## Follow the Nextcloud/Apache/PHP log
 
 occ: ## Run occ in the container, e.g. make occ ARGS="app:list"
 	@$(DC) exec -u www-data $(SERVICE) php occ $(ARGS)
+
+cron: ## Drain the background job queue once (metadata extraction, etc.)
+	@$(DC) exec -T -u www-data $(SERVICE) php -f cron.php
+	@echo "background jobs drained"
 
 shell: ## Root shell in the Nextcloud container
 	$(DC) exec -u root $(SERVICE) bash
