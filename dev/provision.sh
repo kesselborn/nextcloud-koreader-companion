@@ -97,7 +97,21 @@ occ user:setting "$NC_USER" "$APP_ID" auto_rename no
 # we need neither md5sum (absent on macOS) nor openssl on the host.
 md5=$(dc exec -T "$SERVICE" php -r 'echo md5($argv[1]);' -- "$KOREADER_PASSWORD" | tr -d '\r')
 [ ${#md5} -eq 32 ] || die "failed to compute MD5 of the KOReader password (got '$md5')"
-occ user:setting "$NC_USER" "$APP_ID" koreader_sync_password "$md5"
+
+# Delete first, then set. `occ user:setting` writes an untyped value, so if the
+# key already exists as a *typed* string -- which it does the moment anyone sets
+# a sync password through the UI -- the write fails with "conflict between new
+# type (mixed) and old type (string)". That failure used to go unnoticed: the
+# exit code was ignored and the success line printed anyway, so provisioning
+# claimed the password was 'test123' while the old one was still in place and
+# every KOReader test authenticated with the wrong credential.
+occ user:setting --delete "$NC_USER" "$APP_ID" koreader_sync_password 2>/dev/null || true
+occ user:setting "$NC_USER" "$APP_ID" koreader_sync_password "$md5" \
+  || die "failed to set the KOReader sync password"
+
+# Prove it round-trips rather than trusting the exit code alone.
+stored=$(occ user:setting "$NC_USER" "$APP_ID" koreader_sync_password | tr -d '\r\n')
+[ "$stored" = "$md5" ] || die "sync password did not store (wanted $md5, got '$stored')"
 say "KOReader sync password set to '$KOREADER_PASSWORD' (md5 $md5)"
 
 # ---------------------------------------------------------------- 6. sample data
