@@ -454,6 +454,24 @@ processed" was.
       Verified: title, author and recent each return a different order
 - [x] 10.2 The sort control had no visible label — only an `aria-label` — so it read as an unexplained
       second box beside the search field. Now labelled `Sort by` via NcSelect's `input-label`
+- [x] 10.4 **Reading progress from real devices was never stored.** Every push returned HTTP 500:
+      `koreader_sync_progress.percentage` was `varchar(10)`, and KOReader sends the position as a raw
+      float — a real device sends `0.6333333333333333`, 18 characters. The UI showed nothing because
+      there was nothing to show. `Version0009` widens the column to 32 (widened, not converted to a
+      float: PostgreSQL will not cast varchar → double precision without a `USING` clause Doctrine does
+      not emit, so a type change would break the migration on our own database). `saveDocumentProgress()`
+      also normalises now — percentage clamped and rounded to 6dp, `device`/`device_id` truncated to
+      their column width, since all three are client-controlled and a long device name would have failed
+      identically. **Confirmed working from the reporter's own reader.**
+      *Why no test caught it:* the suite sends `0.25`, which fits in 10 characters. Worth a case with
+      full float precision — see `10.6`
+- [ ] 10.5 The sort control and search field still do not line up, and have different heights.
+      `align-items: flex-end` on the toolbar was not enough — the select's root appears to extend below
+      its visible box. **Do not guess at this again**: measure the rendered boxes first (the page needs a
+      session, so a logged-in DevTools console is the quickest route), then fix against the numbers
+- [ ] 10.6 Add a KOReader test case that sends full float precision (e.g. `0.6333333333333333`) and a
+      long device name. Both would have caught `10.4`; the current fixtures are short enough to fit any
+      column
 - [x] 10.3 Author names on cards are clickable, titled "Search for books of this author", and fill the
       search box and run the search. A real `<button>` styled back down to look like text, so it is
       keyboard-reachable and announced as an action. Uses the same query a user could type rather than a
