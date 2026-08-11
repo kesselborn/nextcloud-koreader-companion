@@ -101,11 +101,36 @@ print_result() {
 }
 
 # Function to make authenticated KOReader API request
+# Same request as koreader_request, but echoes the HTTP status instead of the body.
+# Needed because several assertions here cannot distinguish a real answer from an
+# error page by body content alone -- an unauthorised reply is valid-looking JSON.
+koreader_status() {
+    local method=$1
+    local endpoint=$2
+    local data=$3
+
+    local auth_key=$(md5hex "$KOREADER_PASSWORD")
+
+    local curl_args=(
+        -s -o /dev/null -w "%{http_code}"
+        -X "$method"
+        -H "Content-Type: application/vnd.koreader.v1+json"
+        -H "x-auth-user: $USERNAME"
+        -H "x-auth-key: $auth_key"
+    )
+
+    if [[ -n "$data" ]]; then
+        curl_args+=(-d "$data")
+    fi
+
+    curl "${curl_args[@]}" "$KOREADER_BASE_URL$endpoint"
+}
+
 koreader_request() {
     local method=$1
     local endpoint=$2
     local data=$3
-    
+
     # Use MD5 hash of password for KOReader auth
     local auth_key=$(md5hex "$KOREADER_PASSWORD")
     
@@ -228,16 +253,27 @@ TEST_PROGRESS_DATA='{
 }'
 
 # Test PUT progress (should work regardless of whether document exists)
+#
+# Asserts on the status code, not the body. This used to check for '"message"' and
+# the absence of '"error"' -- which an unauthorised reply, {"message":"Unauthorized"},
+# satisfies. So the test passed while authentication was completely broken, and the
+# real failure surfaced further down as two unrelated-looking GET failures instead.
+status=$(koreader_status "PUT" "/sync/syncs/progress" "$TEST_PROGRESS_DATA")
 response=$(koreader_request "PUT" "/sync/syncs/progress" "$TEST_PROGRESS_DATA")
-if [[ "$response" == *'"message"'* ]] && [[ "$response" != *'"error"'* ]]; then
+if [[ "$status" == "401" ]]; then
+    print_result "FAIL" "PUT progress update (authentication rejected)" "$response"
+elif [[ "$status" == "200" ]] && [[ "$response" == *'"message"'* ]]; then
     print_result "PASS" "PUT progress update" "$response"
 else
-    print_result "WARN" "PUT progress update (document may not exist)" "$response"
+    print_result "FAIL" "PUT progress update" "HTTP $status: $response"
 fi
 
 # Test GET progress for the document we just updated
+status=$(koreader_status "GET" "/sync/syncs/progress/$TEST_DOCUMENT_HASH" "")
 response=$(koreader_request "GET" "/sync/syncs/progress/$TEST_DOCUMENT_HASH" "")
-if [[ "$response" == *'"progress"'* ]] && [[ "$response" == *'"percentage"'* ]]; then
+if [[ "$status" == "401" ]]; then
+    print_result "FAIL" "GET progress retrieval (authentication rejected)" "$response"
+elif [[ "$response" == *'"progress"'* ]] && [[ "$response" == *'"percentage"'* ]]; then
     print_result "PASS" "GET progress retrieval" "$response"
 elif [[ "$response" == *'"message":"Document not found"'* ]]; then
     print_result "WARN" "GET progress retrieval (document not found - expected if no books indexed)" "$response"
