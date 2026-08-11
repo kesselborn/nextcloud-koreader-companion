@@ -22,26 +22,29 @@
 				<div class="book__progress-fill" :style="{ width: percentage + '%' }" />
 			</div>
 
-			<NcActions class="book__actions" :force-menu="true">
-				<NcActionButton close-after-click @click="$emit('edit')">
+			<!-- Action buttons always visible on the cover, not hidden behind a
+			     kebab menu. Edit and Delete are the two things people look for. -->
+			<div v-if="!pending" class="book__actions">
+				<NcButton
+					:aria-label="t('koreader_companion', 'Edit')"
+					type="tertiary-no-background"
+					class="book__action-btn"
+					@click="$emit('edit')">
 					<template #icon>
-						<Pencil :size="20" />
+						<Pencil :size="18" />
 					</template>
-					{{ t('koreader_companion', 'Edit metadata') }}
-				</NcActionButton>
-				<NcActionLink :href="downloadUrl" :download="book.name">
+				</NcButton>
+				<NcButton
+					:aria-label="t('koreader_companion', 'Download')"
+					type="tertiary-no-background"
+					class="book__action-btn"
+					:href="downloadUrl"
+					:download="book.name">
 					<template #icon>
-						<Download :size="20" />
+						<Download :size="18" />
 					</template>
-					{{ t('koreader_companion', 'Download') }}
-				</NcActionLink>
-				<NcActionLink :href="filesUrl">
-					<template #icon>
-						<FolderOutline :size="20" />
-					</template>
-					{{ t('koreader_companion', 'Show in Files') }}
-				</NcActionLink>
-			</NcActions>
+				</NcButton>
+			</div>
 		</div>
 
 		<div class="book__meta">
@@ -61,12 +64,9 @@
 
 <script>
 import { generateUrl } from '@nextcloud/router'
-import NcActionButton from '@nextcloud/vue/components/NcActionButton'
-import NcActionLink from '@nextcloud/vue/components/NcActionLink'
-import NcActions from '@nextcloud/vue/components/NcActions'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import Download from 'vue-material-design-icons/Download.vue'
-import FolderOutline from 'vue-material-design-icons/FolderOutline.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 
 import { coverUrl } from '../api.js'
@@ -81,10 +81,7 @@ export default {
 
 	components: {
 		Download,
-		FolderOutline,
-		NcActionButton,
-		NcActionLink,
-		NcActions,
+		NcButton,
 		NcLoadingIcon,
 		Pencil,
 	},
@@ -220,8 +217,23 @@ export default {
 
 	&__actions {
 		position: absolute;
-		inset-block-start: 2px;
-		inset-inline-end: 2px;
+		inset-block-start: 4px;
+		inset-inline-end: 4px;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		z-index: 1;
+	}
+
+	&__action-btn {
+		opacity: .7;
+		transition: opacity .15s;
+		color: white;
+		--button-size: 32px;
+
+		&:hover {
+			opacity: 1;
+		}
 	}
 
 	&__meta {

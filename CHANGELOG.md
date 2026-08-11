@@ -5,6 +5,112 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-11
+
+A full migration from Nextcloud 30–31 to Nextcloud 34. The app did not run at
+all on 33 or 34 — six hard fatals, a dead frontend, and a security audit's worth
+of issues. Everything below was verified against a live Nextcloud 34.0.2
+instance on both PostgreSQL and MariaDB.
+
+### Added — Nextcloud 34 compatibility
+- Declares `min-version=34 max-version=34` and `php >= 8.2` in `info.xml`
+- Migrates all 41 controller methods from docblock annotations to PHP 8
+  attributes (`#[NoAdminRequired]`, `#[NoCSRFRequired]`, `#[PublicPage]`,
+  `#[BruteForceProtection]`)
+- Replaces `\OC::$server` service-locator calls (removed in NC 34) with
+  dependency injection throughout
+- Replaces `IConfig` with `IUserConfig`; the sync password is stored with
+  `FLAG_SENSITIVE` so it is encrypted at rest and redacted from support dumps
+- Registers the console command via `info.xml <commands>` instead of
+  `appinfo/register_command.php` (which used `\OC::$server->get()`)
+- `#[AsCommand]` replaces the deprecated `protected static $defaultName`
+- Migrations rewritten onto `IUserConfig`/`IAppConfig`/`IUserManager` instead of
+  raw `oc_preferences`/`oc_appconfig`/`oc_users` queries (which break with NC 31+
+  typed/lazy config tables)
+
+### Added — frontend (Vue 3 rewrite)
+- Complete rewrite in Vue 3 + `@nextcloud/vue` 9, pinned to the dependency set
+  NC 34.0.2 ships itself
+- Cover grid backed by Nextcloud's preview system, with progress bars and device
+  names overlaid
+- Search, server-side sort, infinite scroll — all through one data path via
+  `IInitialState` (the old template rendered 50 books and then re-fetched them
+  with different markup)
+- Upload modal (drag-and-drop, two-step extract-then-confirm)
+- Metadata edit/delete modal with series, publisher, description for all formats
+- Settings (folder picker via `getFilePickerBuilder`, auto-rename toggle,
+  batch rename with progress)
+- Sync and OPDS connection views with copy-to-clipboard and step-by-step
+  instructions
+- Pending state: freshly uploaded books show a spinner and "Queued for
+  processing" while a background job extracts their metadata
+
+### Added — covers via preview providers
+- `EpubCoverProvider` and `ComicCoverProvider` registered as `IProviderV2`
+- Covers cached in Nextcloud's preview storage, served from `/core/preview` with
+  ordinary session auth (the old endpoint was Basic-auth-only, unreachable from
+  the web session)
+- 251 lines of bespoke per-request thumbnail extraction deleted
+- PDF covers are impossible on NC 34.0.2: that release hard-codes
+  `IMagickSupport` to `false` as a security measure
+  ([nextcloud/server#62802](https://github.com/nextcloud/server/issues/62802))
+
+### Added — background metadata extraction
+- Extraction moved out of the upload's database transaction into a queued job
+  (`ExtractMetadataJob`), fixing the "dirty table reads" assertion that
+  silently broke all metadata extraction when debug mode was enabled
+- Books appear instantly as `pending`; cron fills in the details
+
+### Added — CBZ support and metadata fixes
+- CBZ is now a supported format (it was missing despite being the more common
+  comic container and the only one PHP reads unaided)
+- EPUB series extraction from `calibre:series` and EPUB 3
+  `belongs-to-collection` (previously never read, so the OPDS series facet was
+  permanently empty)
+- EPUB publication dates now persist (a drifted merge allow-list dropped them)
+- `series_index` written from the real index, not just from `issue`
+- `ComicInfo.xml` extraction fixed (it used a non-existent writer API and had
+  never worked)
+
+### Added — sync protocol
+- Progress response now includes `document` and `timestamp`, matching the
+  reference kosync server — without `document`, Readest on iOS could not pull
+  progress from custom servers; without `timestamp`, clients cannot resolve
+  conflicts
+- Brute-force protection on all credential-checking sync endpoints
+- `hash_equals()` instead of `===` for the MD5 comparison
+
+### Added — security
+- CSRF protection re-enabled on 8 session-authenticated writers (it was
+  disabled despite the token being sent)
+- Brute-force throttling on the KOReader sync credential check
+
+### Added — i18n
+- Full German translation (93 strings, including plurals)
+- `dev/l10n-extract.mjs` generates and merges `l10n/` from `t()`/`n()` calls;
+  CI fails if translations drift from the sources
+
+### Added — infrastructure
+- Docker dev stack: `make dev` boots NC 34 + PostgreSQL with live reload
+- MariaDB profile (`make mysql-up`), NC 31 comparison profile
+- CI: `php -l` 8.2–8.5, `composer validate --strict`, `info.xml` schema,
+  frontend build freshness, l10n freshness, and both integration suites against
+  a real NC 34 container
+- macOS portability fixes for the test scripts (`md5sum` → `openssl`,
+  `grep -oP` → portable alternatives)
+
+### Changed
+- `IConfig` → `IUserConfig` (21 call sites)
+- KOReader sync response `Content-Type` is `application/json`, not the vendor
+  type — deliberately, because real clients fail to pull with the vendor type
+  (issue #4, [koreader/koreader#13539](https://github.com/koreader/koreader/issues/13539))
+
+### Removed
+- MOBI support — no cover extraction, no preview provider, no metadata parser
+- Dead code: `PageController::addProgressToBooks()` (63 lines, never called),
+  bespoke thumbnail extraction, `cover_image` column, orphaned
+  `koreader_file_tracking` table, 5 duplicate database indexes
+
 ## [1.2.4] - 2025-11-15
 
 ### Fixed
