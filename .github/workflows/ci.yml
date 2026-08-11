@@ -44,6 +44,33 @@ jobs:
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist
 
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # These parse untrusted files in-process: smalot/pdfparser reads uploaded
+      # PDFs, kiwilan/php-archive shells out to unrar, and epubjs unpacks EPUBs in
+      # the browser. Nothing was watching their advisories.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: composer audit
+        run: composer audit --no-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # High and above only: epubjs is effectively unmaintained and its transitive
+      # dev tree is noisy, so a low-severity advisory must not wedge every PR.
+      - name: npm audit
+        run: npm audit --audit-level=high --omit=dev
+
   info-xml:
     name: info.xml schema
     runs-on: ubuntu-latest
