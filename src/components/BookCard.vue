@@ -8,7 +8,15 @@
 				loading="lazy"
 				class="book__image"
 				@error="coverFailed = true">
-			<span v-else class="book__format">{{ book.format.toUpperCase() }}</span>
+			<!-- No cover: a real placeholder rather than bare text. PDFs never get one
+			     -- Nextcloud 34 disabled every ImageMagick-backed preview provider
+			     (nextcloud/server#62802) -- so this is what a PDF always looks like,
+			     and it should look deliberate. -->
+			<div v-else class="book__placeholder">
+				<FilePdfBox v-if="isPdf" :size="44" />
+				<BookOpenVariant v-else :size="44" />
+				<span class="book__format">{{ book.format.toUpperCase() }}</span>
+			</div>
 
 			<!-- Pending means a background job has not extracted metadata yet, so
 			     the title is still just the filename. Say so plainly. -->
@@ -88,7 +96,9 @@ import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import BookOpenPageVariant from 'vue-material-design-icons/BookOpenPageVariant.vue'
+import BookOpenVariant from 'vue-material-design-icons/BookOpenVariantOutline.vue'
 import Download from 'vue-material-design-icons/Download.vue'
+import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 
 import { coverUrl } from '../api.js'
@@ -103,7 +113,9 @@ export default {
 
 	components: {
 		BookOpenPageVariant,
+		BookOpenVariant,
 		Download,
+		FilePdfBox,
 		NcButton,
 		NcLoadingIcon,
 		Pencil,
@@ -127,6 +139,9 @@ export default {
 	computed: {
 		pending() {
 			return this.book.indexing_state === 'pending'
+		},
+		isPdf() {
+			return (this.book.format || '').toLowerCase() === 'pdf'
 		},
 		readable() {
 			// The built-in reader is epub.js, so EPUB only. PDFs and comics keep
@@ -202,6 +217,15 @@ export default {
 		height: 100%;
 		object-fit: cover;
 		display: block;
+	}
+
+	&__placeholder {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: calc(var(--default-grid-baseline) * 2);
+		color: var(--color-text-maxcontrast);
 	}
 
 	&__format {
