@@ -22,7 +22,7 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 - [x] 1.8 Rewrite `Makefile` — `dev up down logs occ shell reset seed test`; make `install` actually install; fix hardcoded `occ` path in `sign`
 - [x] 1.9 Fix `test_scripts/test_koreader.sh` for macOS — `md5hex` helper (verified: `md5hex test123` → `cc03e747…`)
 - [x] 1.10 Fix `test_scripts/test_opds.sh` for macOS — replace GNU-only `grep -oP`
-- [x] 1.11 Retire `test_scripts/reset_and_deploy.sh` — copy-in deploy is obsolete; drop dead `ebooks_poc` refs; rename command to `koreader:generate-hashes`
+- [x] 1.11 Retire `test_scripts/reset_and_deploy.sh` — copy-in deploy is obsolete; drop dead `ebooks_poc` refs; rename command to `koreader:generate-hashes`. Note: the file is *kept* as a 33-line tombstone that prints the `make` replacement and `exit 1`s, rather than deleted, so muscle memory gets a pointer instead of "command not found".
 - [x] 1.12 Document local dev in `README.md`
 - [x] 1.13 **Verify**: `make up` + `provision.sh` boot green on NC 34.0.2; app enables (with `--force`, confirming F5); 3/3 fixtures extract metadata
 - [x] 1.14 **Verify**: captured the real F1 fatal — `HTTP 500 Call to undefined method OC\Server::getConfig()` in `templates/page.php`
@@ -37,7 +37,9 @@ Moved out of Phase 1:
 
 ## Phase 2 — Unblock NC 34 (backend)
 
-- [x] 2.1 `appinfo/info.xml` — `min=34 max=35`, `<php min-version=8.2>`, `<commands>`, version 1.3.0
+- [x] 2.1 `appinfo/info.xml` — ~~`min=34 max=35`~~ **now `min=34 max=34`** (narrowed in `8d454b1`: NC 35
+      was never actually tested, and claiming it was unverified support), `<php min-version=8.2>` with no
+      max, `<commands>`. Version has since moved 1.3.0 → **1.4.0**.
       (no `<screenshot>`: needs a real hosted image, deferred rather than faked)
 - [x] 2.2 `composer.json` — `php: ^8.2`, `smalot/pdfparser` promoted to a direct dependency
 - [x] 2.3 `OpdsController` — inject `IURLGenerator`, kill 4× `\OC::$server->getURLGenerator()` (**F2**) — OPDS feed now HTTP 200
@@ -80,11 +82,15 @@ Moved out of Phase 1:
 
 ### Found while verifying Phase 1 (new)
 
-- [!] 2.24 Listener reads `oc_filecache` inside the upload's own write transaction — NC flags this as a
+- [x] 2.24 Listener reads `oc_filecache` inside the upload's own write transaction — NC flags this as a
       "dirty table read" and it throws on every WebDAV PUT when `debug=true`, silently producing no
-      metadata. **Needs a design decision, not a patch**: the only real fix is moving extraction into a
-      background job (`IJobList`), which trades a dev-only assertion for a delay in the app's headline
-      "real-time metadata" behaviour. Deliberately not changed unilaterally — flagged for a call.
+      metadata. **Resolved: extraction moved into a background job.** `FileCreationListener` now only
+      calls `markFilePending()` (node data only, no file read, no filecache query) and queues
+      `ExtractMetadataJob`; `BookService::indexFile()` does the work when cron runs, and the row carries
+      `indexing_state` so the UI shows "being processed" instead of a filename posing as a title. New
+      `Version0008` adds the column + `meta_state_idx`. The accepted trade-off is cron latency.
+      See `lib/BackgroundJob/ExtractMetadataJob.php`, `FileCreationListener.php:47-72`,
+      `BookService.php:261-353`. **Left two defects behind — see 8.1.**
 - [~] 2.25 `binary_hash` / `filename_hash` are always NULL — real hashes live in `oc_koreader_hash_mapping`.
       **Blocked on reworking `GenerateBookHashesCommand` first**: it selects and updates these columns, and
       its predicate `binary_hash IS NULL` is therefore always true, so the command reprocesses the entire
@@ -120,9 +126,10 @@ Moved out of Phase 1:
 - [x] 3.8 **CBZ now supported** — one `BookService::SUPPORTED_EXTENSIONS` constant replaces four copies;
       comic branch handles cbr and cbz. Fixed `extractComicInfoMetadata()`, which used the same broken
       writer API as the old cover code and had therefore never read a ComicInfo.xml at all.
-- [~] 3.9 `mobi` kept, not dropped. It has no cover extraction, no preview provider and only filename-based
-      metadata, but removing a declared format would orphan existing users' libraries. Your call — say the
-      word and it goes.
+- [x] 3.9 ~~`mobi` kept, not dropped~~ **MOBI has since been dropped** (commit `8d454b1`). Zero `mobi`
+      references remain in `lib/` or `src/`; `BookService::SUPPORTED_EXTENSIONS` is now
+      `['epub', 'pdf', 'cbr', 'cbz']`. This also supersedes 3.7's "PDF/MOBI → 404" phrasing — only PDF
+      still degrades to 404.
 
 ## Phase 4 — Vue frontend rewrite
 
@@ -145,7 +152,10 @@ Moved out of Phase 1:
 - [ ] 4.12 Add `.php-cs-fixer.dist.php`, `psalm.xml`, `tests/` skeleton (deferred: CI now covers
       `php -l` 8.2–8.5, `composer validate --strict`, info.xml schema, frontend build and both
       integration suites; static analysis and unit tests are the remaining gap)
-- [x] 4.13 Add PR CI workflow with an NC 34/35 matrix (`release.yml` pins PHP 8.1 and only runs on release)
+- [x] 4.13 Add PR CI workflow (`release.yml` pins PHP 8.1 and only runs on release). **Correction to the
+      original wording**: the matrix that shipped is *PHP* 8.2–8.5, not NC 34/35 — the integration job
+      boots NC 34 only, matching `info.xml max-version=34` (see 2.1). There is no NC 35 leg; adding one
+      means un-pinning `info.xml` first, so it is deliberately out of scope, not forgotten.
 - [x] 4.14 **Verify**: real Chrome session, **zero console errors**. 3 books, 2 EPUB covers decoded at
       256×384, PDF placeholder, progress 63% + device, search `kafka` → 1 book server-side, `sort=recent`
       sent, all 4 tabs render, upload + metadata modals open with prefilled values
@@ -175,3 +185,229 @@ Moved out of Phase 1:
 - [x] 5.1 Build the single-page HTML deck → `docs/nc34-audit.html`
 - [x] 5.2 Publish as an Artifact — https://claude.ai/code/artifact/a592fb28-185d-4287-8118-ae347e4d579a
 - [x] 5.3 Refresh the deck with the reproduced-and-fixed evidence and the three runtime-only findings (R1-R3)
+
+## Phase 7 — In-browser EPUB reader
+
+Undocumented until now: this shipped as working-tree changes with no task covering it.
+
+- [x] 7.1 `src/components/ReaderModal.vue` — epub.js reader, wired through `App.vue` and gated to
+      `format === 'epub'` in `BookCard.vue`
+- [x] 7.2 `GET /books/{id}/file` (`page#bookFile`) — raw bytes under plain session auth. Needed because
+      the OPDS download route demands Basic Auth and `/f/{fileId}` redirects into the Files app, so
+      neither is fetchable from the web UI
+- [x] 7.3 CSP widened in `PageController::index()` — `blob:` added to frame/style/font/image/media so
+      epub.js can hand unpacked chapters to its iframe. **`script-src` deliberately untouched**
+- [x] 7.4 Reading position and font size persisted in `localStorage`, keyed by book id
+- [ ] 7.5 Commit this work — it is still uncommitted, alongside the rebuilt `js/`/`css/` bundles
+- [ ] 7.6 Pin the security assumption in code: a comment at `ReaderModal.vue:180` stating that
+      `allowScriptedContent: false` is load-bearing, plus an epub.js entry in the upgrade checklist.
+      Flipping it, or an epub.js release that changes its iframe `sandbox` defaults, turns
+      attacker-authored EPUB XHTML into same-origin script execution. See `docs/security-audit.html`
+
+## Phase 8 — Public-instance hardening
+
+From the security review → `docs/security-audit.html`. Threat model: untrusted registered users plus
+anonymous traffic hitting `/opds/*` and `/sync/*`. **8.2 is the deployment gate**; the rest is defence
+in depth. Ordered cheapest-win-first, not by severity.
+
+### Correctness fallout from 2.24 (found while reviewing)
+
+- [x] 8.1 **Fixed.** The background job silently reverted metadata typed at upload time. Two defects:
+      (a) `uploadBook` wrote the user's form values via `storeBookMetadata()` but never cleared
+      `indexing_state`, so a web-UI upload sat in `pending` and the UI claimed it was still processing;
+      (b) the listener had queued `ExtractMetadataJob` for that same file id and `indexFile()` had no
+      state guard, so cron later overwrote *every* column with re-extracted file metadata, discarding
+      what the user typed. `indexFile()` now returns early on rows already `STATE_DONE` (with a `$force`
+      escape hatch), and both `storeBookMetadata()` branches set `STATE_DONE`. `markFilePending()` still
+      flips a row back to pending when the file itself changes, so genuine re-indexing is unaffected.
+      **Still owed: the regression test** — blocked on 4.12/tests, and on 9.1 for an environment that
+      runs jobs at all.
+
+### The gate
+
+- [~] 8.2 **H1 — remote resource amplification.** Partially closed.
+      (a) **done** — `tryAutoIndex()` now stops after `AUTO_INDEX_MAX_FILES` (200). KOReader retries, so
+      a document past the bound is still found across a few syncs, and `koreader:generate-hashes` maps
+      the rest up front;
+      (b) **not done** — listings still re-scan and re-parse the folder on every request, and
+      `getBookById()` is still an O(library) scan. Serving from `oc_koreader_metadata` and looking up by
+      id in SQL is a real refactor of `getBooks()`/`scanFolder()`, deliberately not attempted in the same
+      pass as the security fixes. **This is the remaining half of the deployment gate**;
+      (c) **deferred** — `batchRename` still runs in-request; moving it to `IJobList` is its own change.
+      Rate-limited to 2 per 5 minutes as a stopgap.
+      Rate limits added: `uploadBook` and `extractMetadata` 30/min, `bookFile` 120/min,
+      `processPending` 10/min, `batchRename` 2/5min, and `#[BruteForceProtection]` on all 15 OPDS
+      endpoints
+- [x] 8.3 `DocumentHashGenerator` (21 calls) and `KoreaderController` (8 calls) demoted from
+      `logger->info` to `logger->debug` — no more writing every user's reading activity to the server log
+      at info level, and most of 8.2's log-disk blast radius gone
+
+### Input validation and information disclosure
+
+- [x] 8.4 Client-facing errors are generic now. `PageController::internalError()` logs the exception and
+      returns a fixed message; the four upload/metadata/delete handlers and
+      `SettingsController::batchRename` use it. No more absolute paths or driver text on the wire
+- [x] 8.5 Uploads validated server-side: `rejectUnacceptableUpload()` checks
+      `BookService::SUPPORTED_EXTENSIONS` and a 512 MB cap (`MAX_UPLOAD_BYTES`, matching
+      `CoverProvider::MAX_FILE_SIZE`) on both `/upload` and `/extract-metadata`. Filenames now always go
+      through the new `FilenameService::sanitizeUploadFilename()`, which keeps the extension intact while
+      the hardened `sanitizeComponent()` strips control bytes and leading dots and clamps with `mb_substr`
+      so a cut cannot land mid-character
+- [x] 8.6 `setFolder` validates: rejects empty (which resolved to the user's *root* and turned every
+      listing into a full-storage scan), 404s on a missing path, rejects a file, and confirms the
+      resolved node sits inside the user's own folder
+- [x] 8.7 The `extract-metadata` temp file is deleted in a `finally` block, so an exception between
+      `newFile()` and extraction no longer leaves it in the user's folder root
+
+### Supply chain — closes 4.12 partially
+
+- [x] 8.8 New `audit` job in `ci.yml`: `composer audit --no-dev` and
+      `npm audit --audit-level=high --omit=dev`. High-and-above only, so a low-severity advisory in the
+      dev tree cannot wedge every PR
+- [ ] 8.8b psalm and a `tests/` skeleton — still the open half of `4.12`. Static analysis on this
+      codebase will produce a large baseline; worth doing, not worth bundling into a security pass
+
+### Credential and auth design
+
+- [x] 8.9 New `SyncPasswordService`. The received MD5 is now treated as the password and kept under
+      `password_hash()`, so the stored value is no longer the credential. Instances written before this
+      hold a bare MD5: those still authenticate and are **transparently upgraded on the next successful
+      sync**, so nobody re-enters anything. `MIN_PASSWORD_LENGTH = 8` is enforced server-side — the old
+      check was `empty()` here and 4 characters in the browser
+- [ ] 8.10 `IUserSession::setUser()` (`KoreaderController.php:221, 364`) — **not done.** It needs
+      `BookService` to take an explicit user rather than read the session in 11 places, which is a wider
+      change than the rest of this phase and was not worth risking alongside the credential rework.
+      Still the same item as `2.14b`
+
+### Low — mechanical
+
+- [x] 8.11 `Content-Disposition` is built by `BookService::contentDisposition()`: quotes, backslashes and
+      non-ASCII are stripped from the plain `filename`, and RFC 6266 `filename*=UTF-8''` carries the real
+      name
+- [x] 8.12 All three `simplexml_load_string` calls pass
+      `LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING`, matching `EpubCoverProvider`
+- [x] 8.13 OPDS auth centralised in `requireBasicAuth()`: `MaxDelayReached` now returns **429** instead of
+      being flattened into a 401, every failure calls `->throttle()`, all 15 endpoints carry
+      `#[BruteForceProtection(action: 'koreader_opds')]`, and `base64_decode` is strict so a malformed
+      header fails instead of decoding to garbage
+- [x] 8.14 KOReader auth no longer short-circuits on an unknown username. Verification always runs —
+      against a dummy bcrypt digest when there is nothing real to check — so "no such user", "no password
+      set" and "wrong key" cost about the same
+- [x] 8.15 `document` must be 32 hex characters, and unknown documents are capped at
+      `MAX_PROGRESS_ROWS_PER_USER` (5000) per user. Existing rows keep updating at any library size; only
+      *new* unknown ones hit the ceiling (507)
+
+### Not security, but found in the same pass
+
+- [x] 8.16 The five facet feeds no longer pre-escape their titles before handing them to
+      `generatePaginatedOpdsXml`, which escapes again — an `&` in an author name shipped as `&amp;amp;`
+
+### Reviewed and explicitly cleared — do not re-litigate
+
+- [x] 8.17 No injection surface found: every query uses `IQueryBuilder` with `createNamedParameter`,
+      `ORDER BY` is allow-listed via `switch` (`BookService.php:127-141`), no `exec`/`eval`/`unserialize`/
+      outbound HTTP in `lib/`, no `v-html` or `innerHTML` in `src/`, and `templates/page.php` is a bare
+      mount div. Ownership holds via `getUserFolder($uid)->getById($id)`; every table touch carries
+      `AND user_id = <session uid>`. No production secrets committed
+- [x] 8.18 The EPUB reader's sandboxing is correct — see 7.6 for the one assumption to guard
+- [x] 8.19 The unauthenticated `/sync/healthcheck` stays as-is: required by the kosync protocol, returns
+      a static string, reveals only that the app is installed
+- [x] 8.20 **There is no endpoint that can run our job on demand** — checked against the NC 34 source,
+      not the docs. `cron.php` over HTTP lands in `CronService::runWeb()`
+      (`core/Service/CronService.php:266-279`): when `backgroundjobs_mode` is `cron` (the recommended
+      production setting) it logs a line and does *nothing*; otherwise it runs exactly one job via
+      `jobList->getNext()` — whichever is next globally, not necessarily ours. Job-class selection
+      (`php -f cron.php -- <job-classes>`) and `occ background-job:execute|worker` are CLI-only.
+      So self-triggering after upload is impossible on a correctly configured instance and wrong on the
+      rest, and would make the app a cron amplifier — the 8.2 problem. Latency for WebDAV arrivals is a
+      deployment concern: `occ background-job:worker` as a service, which belongs in the README
+
+## Phase 9 — Background jobs actually have to run
+
+Verified live on the dev stack, 11 Aug 2026. The `2.24` pipeline is **correct**; nothing ever runs it.
+A file dropped straight into the eBooks folder is registered and then sits there forever:
+
+```
+oc_jobs:  2× ExtractMetadataJob, last_run = 0        # never executed
+lastcron: 2026-08-11 08:41  (375 min stale)
+compose.yaml: no cron service at all
+grep -n cron Makefile dev/provision.sh dev/seed.sh README.md → no matches
+
+file_id 199  pending  "Brave New World - Aldous Huxley"  author: (none)   # filename-derived
+$ occ background-job:worker --once '…\ExtractMetadataJob'
+file_id 199  done     "Brave New World"                  author: Aldous Huxley
+```
+
+So the app is fine and the harness is not — which is exactly what "it doesn't look like it gets
+processed" was.
+
+- [ ] 9.1 Add a cron sidecar to `compose.yaml` so queued jobs drain in dev. Without it every
+      folder-drop upload stays `pending` indefinitely and the pending-state UI looks like a bug in the
+      app. Mode is already `cron` (`config:app:get core backgroundjobs_mode`), so nothing else changes
+- [ ] 9.2 Add `make cron` (one drain) and have `dev/seed.sh` drain after seeding — otherwise freshly
+      seeded fixtures show filename-derived titles until someone thinks to run the worker by hand
+- [ ] 9.3 Document the requirement in `README.md`: **without working cron, metadata extraction never
+      happens for files that arrive outside the web-UI upload form.** Note the latency contract too —
+      with stock 5-minute cron, a folder-drop shows a filename-derived title for up to 5 minutes. For
+      low latency, `occ background-job:worker` as a long-running service is the supported answer
+      (see 8.20 for why there is no HTTP trigger)
+- [x] 9.6 **"Extract metadata now" button.** Since Nextcloud cannot be asked to run one specific job
+      (8.20), the button does the work in-request rather than poking the queue:
+      `POST /books/process-pending` → `BookService::processPendingBooks()`, which indexes up to
+      `PENDING_BATCH_LIMIT` (25) pending rows and reports `{processed, failed, remaining}`. Safe here
+      because, unlike the upload listener, it runs in its own request with no open write transaction.
+      Rate-limited to 10/min. The queued `ExtractMetadataJob` is left alone — whichever runs first marks
+      the row done and the other skips it (8.1).
+      UI: a button inside the existing pending `NcNoteCard` in `LibraryView.vue`, so it appears **only
+      while something is actually pending** and disappears when the backlog clears. Reports what is left
+      rather than implying the queue is drained. Six new strings, German added, `--check` clean
+- [x] 9.7 **`provision.sh` was silently failing to set the sync password.** `occ user:setting` writes an
+      *untyped* value, so once the key exists as a typed string — which happens the moment anyone sets a
+      sync password through the UI — the write is rejected with `conflict between new type (mixed) and
+      old type (string)`. The exit code was ignored and the success line printed regardless, so
+      provisioning claimed the password was `test123` while the old one stayed in place. Fixed by
+      deleting the key first, checking the exit code, and asserting the value round-trips. This is what
+      made V1 look like a Phase 8 regression
+- [ ] 9.8 Tighten `test_koreader.sh`: `PUT progress update` asserts `contains "message" &&
+      !contains "error"`, which a 401 body (`{"message":"Unauthorized"}`) satisfies — so the test passes
+      when auth is completely broken. Assert on HTTP status instead. It is why a broken credential
+      surfaced as two unrelated-looking GET failures rather than an auth failure
+- [ ] 9.4 Add a `koreader:index` occ command (or reuse `koreader:generate-hashes`) to force-drain this
+      app's own pending rows, for admins debugging a stuck library and for the integration suite
+- [ ] 9.5 Minor: jobs for files deleted before cron ran log `"Skipping metadata extraction for a file
+      that is gone"` and no-op — observed live with `fileId 191`. Correct behaviour, but the delete
+      listener could drop the queued job with `IJobList::remove()` and keep the queue clean
+
+---
+
+## Open items across all phases (single list)
+
+- `2.14b` → folded into **8.10** · `2.21b` `declare(strict_types=1)` · `2.25` NULL hash columns
+- `4.12` → half closed by **8.8**; psalm/tests remain as `8.8b` · `6.6` backend i18n strings
+- `7.5` commit the reader · `7.6` pin the reader's security assumption
+- **`8.2b` — the remaining deployment gate.** Listings still re-scan and re-parse the whole folder per
+  request; `getBookById()` is still an O(library) scan. Everything else in Phase 8 is done
+- `8.2c` batchRename → `IJobList` · `8.8b` psalm/tests · `8.10` drop `setUser()` (= `2.14b`)
+- `9.1`–`9.5` make background jobs actually run — **9.1 first**, it makes 2.24 testable at all
+
+### Verification owed on this pass
+
+- [x] V1 **Resolved — 13/13, and the cause was not the Phase 8 changes.** The two failures came from a
+      dev-stack bug, now fixed as `9.7`: the container's sync password was never actually `test123`, so
+      the suite had been authenticating with the wrong credential. Note the suite's `PUT progress update`
+      assertion is `contains "message" && !contains "error"`, and a 401 body is
+      `{"message":"Unauthorized"}` — **so that test passes on a 401** and masked the failure. Worth
+      tightening (`9.8`).
+- [x] V2 `test_opds.sh` — 29/29 both before and after the changes
+- [x] V3 `php -l` clean across every modified file; `npm run build` clean; `l10n --check` clean
+- [x] V4 **8.9 migration proved end-to-end on a live instance**: the password was stored as a bare MD5
+      (the legacy format), the first sync authenticated via the legacy path, and the stored value was
+      transparently upgraded — `occ user:setting` now reads back `$2y$12$…` and all 13 tests still pass
+      against it. That is exactly the path a real instance takes on upgrade
+- [x] V5 **The button proved end-to-end**: two rows forced to `pending` with placeholder titles →
+      `POST /books/process-pending` → `{"processed":2,"failed":0,"remaining":0}` → both `done` with
+      correctly extracted titles and authors. CSRF is enforced (412 without a token).
+      **8.1's guard proved too**: a row marked `done` carrying hand-entered `MY OWN TITLE`/`Me` survived
+      a press untouched (`processed:0`), so re-extraction can no longer discard what the user typed
+- [ ] V6 Still unproven: `8.5` upload validation, `8.6` folder validation and `8.11` header escaping
+      have no test coverage — they were verified by reading, not by running. Needs `8.8b`/`4.12`

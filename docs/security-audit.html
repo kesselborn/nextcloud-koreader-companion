@@ -1,0 +1,824 @@
+<title>KOReader Companion — public-instance security review</title>
+<style>
+  :root {
+    --ground:  #eaeff3;
+    --paper:   #ffffff;
+    --sunk:    #dfe6ec;
+    --ink:     #0d161c;
+    --ink-2:   #3a4c57;
+    --ink-3:   #6d808c;
+    --line:    #ccd8e0;
+    --line-2:  #e2eaef;
+    --accent:  #0082c9;
+    --accent-2:#005c8f;
+    --crit:    #b52a45;
+    --crit-bg: #fbe9ec;
+    --warn:    #96600a;
+    --warn-bg: #fbf1de;
+    --ok:      #136b56;
+    --ok-bg:   #e3f3ee;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0a1116; --paper: #121c23; --sunk: #0e171d;
+      --ink: #e7eef3; --ink-2: #a3b5c0; --ink-3: #71858f;
+      --line: #24333c; --line-2: #1b272e;
+      --accent: #3fabe8; --accent-2: #7ac6f2;
+      --crit: #f2798d; --crit-bg: #2d1620;
+      --warn: #dda63f; --warn-bg: #2a2013;
+      --ok: #48c8a0; --ok-bg: #10251f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0a1116; --paper: #121c23; --sunk: #0e171d;
+    --ink: #e7eef3; --ink-2: #a3b5c0; --ink-3: #71858f;
+    --line: #24333c; --line-2: #1b272e;
+    --accent: #3fabe8; --accent-2: #7ac6f2;
+    --crit: #f2798d; --crit-bg: #2d1620;
+    --warn: #dda63f; --warn-bg: #2a2013;
+    --ok: #48c8a0; --ok-bg: #10251f;
+  }
+  :root[data-theme="light"] {
+    --ground: #eaeff3; --paper: #ffffff; --sunk: #dfe6ec;
+    --ink: #0d161c; --ink-2: #3a4c57; --ink-3: #6d808c;
+    --line: #ccd8e0; --line-2: #e2eaef;
+    --accent: #0082c9; --accent-2: #005c8f;
+    --crit: #b52a45; --crit-bg: #fbe9ec;
+    --warn: #96600a; --warn-bg: #fbf1de;
+    --ok: #136b56; --ok-bg: #e3f3ee;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.mast { padding: 72px 0 40px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 20px;
+  }
+  h1 {
+    font-size: clamp(2rem, 5.2vw, 3.3rem); line-height: 1.05; margin: 0 0 20px;
+    font-weight: 700; letter-spacing: -.025em; text-wrap: balance; max-width: 26ch;
+  }
+  .standfirst { font-size: clamp(1.05rem, 2vw, 1.22rem); color: var(--ink-2); margin: 0; max-width: 62ch; }
+  .standfirst strong { color: var(--ink); font-weight: 650; }
+
+  .verdict {
+    display: flex; flex-wrap: wrap; gap: 0; margin: 40px 0 0;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px; overflow: hidden;
+  }
+  .verdict > div { flex: 1 1 150px; padding: 18px 20px; border-right: 1px solid var(--line-2); }
+  .verdict > div:last-child { border-right: 0; }
+  .verdict dt {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 8px;
+  }
+  .verdict dd {
+    margin: 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .verdict dd small { display: block; font-family: var(--sans); font-size: .78rem; font-weight: 400; color: var(--ink-3); letter-spacing: 0; margin-top: 4px; }
+  .n-crit { color: var(--crit); } .n-warn { color: var(--warn); } .n-ok { color: var(--ok); }
+
+  section { padding: 64px 0 0; }
+  h2 {
+    font-size: clamp(1.35rem, 2.6vw, 1.75rem); font-weight: 650; letter-spacing: -.02em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .sec-head { border-top: 1px solid var(--line); padding-top: 18px; margin-bottom: 28px; }
+  .sec-head .eyebrow { margin-bottom: 14px; }
+  .sec-head p { margin: 10px 0 0; color: var(--ink-2); max-width: 68ch; }
+  h3 { font-size: 1.02rem; font-weight: 650; margin: 34px 0 12px; letter-spacing: -.01em; }
+  p.body { color: var(--ink-2); max-width: 68ch; }
+
+  code, .m { font-family: var(--mono); font-size: .855em; }
+  code {
+    background: var(--sunk); padding: .12em .38em; border-radius: 3px;
+    border: 1px solid var(--line-2); white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .scroller { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: .89rem; }
+  caption { text-align: left; padding: 16px 20px 0; color: var(--ink-3); font-size: .82rem; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 500; border-bottom: 1px solid var(--line); white-space: nowrap;
+    background: var(--paper);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td .m { color: var(--ink-3); font-size: .8rem; }
+
+  /* ---- findings ---- */
+  .find { border-top: 1px solid var(--line-2); padding: 22px 0; display: grid; gap: 4px 20px;
+          grid-template-columns: 62px 1fr auto; align-items: baseline; }
+  .find:first-of-type { border-top: 1px solid var(--line); }
+  .tag { font-family: var(--mono); font-size: .78rem; font-weight: 700; letter-spacing: .04em; }
+  .tag.crit { color: var(--crit); } .tag.warn { color: var(--warn); } .tag.ok { color: var(--ok); }
+  .tag.low { color: var(--ink-3); }
+  .find .what { font-weight: 600; grid-column: 2; }
+  .find .when {
+    grid-column: 3; font-family: var(--mono); font-size: .72rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--crit); background: var(--crit-bg);
+    padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+  }
+  .find .when.w { color: var(--warn); background: var(--warn-bg); }
+  .find .when.o { color: var(--ok); background: var(--ok-bg); }
+  .find .when.n { color: var(--ink-3); background: var(--sunk); }
+  .find .where { grid-column: 2 / -1; color: var(--ink-2); font-size: .92rem; }
+  .find .where .m { color: var(--ink-3); }
+  .find .where p { margin: 0 0 8px; }
+  .find .where p:last-child { margin-bottom: 0; }
+  .find .fix { grid-column: 2 / -1; margin-top: 10px; font-size: .89rem; color: var(--ink-2);
+               border-left: 2px solid var(--ok); padding-left: 12px; }
+  .find .fix b { color: var(--ok); font-weight: 650; }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 3px; }
+  .cols > div { background: var(--paper); padding: 22px 24px; }
+  .cols h4 { margin: 0 0 4px; font-size: .95rem; font-weight: 650; }
+  .cols .lab { font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
+  .cols ul { margin: 0; padding-left: 1.1em; }
+  .cols li { margin-bottom: 9px; color: var(--ink-2); font-size: .93rem; }
+  .cols li strong { color: var(--ink); font-weight: 600; }
+  .cols li::marker { color: var(--ink-3); }
+
+  .phase { display: grid; grid-template-columns: 88px 1fr; gap: 0 24px; border-top: 1px solid var(--line-2); padding: 22px 0; }
+  .phase:first-of-type { border-top: 1px solid var(--line); }
+  .phase .pn { font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); padding-top: 3px; }
+  .phase h4 { margin: 0 0 6px; font-size: 1rem; font-weight: 650; }
+  .phase p { margin: 0; color: var(--ink-2); font-size: .93rem; max-width: 66ch; }
+
+  .repro { margin-top: 40px; border: 1px solid var(--line); border-left: 3px solid var(--crit); background: var(--paper); border-radius: 3px; padding: 22px 24px; }
+  .repro p { margin: 0 0 14px; color: var(--ink-2); max-width: 68ch; font-size: .95rem; }
+  .repro .eyebrow { color: var(--crit); margin-bottom: 12px; }
+  .repro.good { border-left-color: var(--ok); }
+  .repro.good .eyebrow { color: var(--ok); }
+  .repro pre { margin: 0; overflow-x: auto; background: var(--sunk); border: 1px solid var(--line-2);
+               border-radius: 3px; padding: 14px 16px; }
+  .repro pre code { background: none; border: 0; padding: 0; white-space: pre; font-size: .78rem; line-height: 1.7; color: var(--ink-2); }
+  .repro pre b { color: var(--ink); font-weight: 700; }
+  .repro .note { margin: 14px 0 0; font-size: .88rem; color: var(--ink-3); }
+
+  footer { margin-top: 72px; border-top: 1px solid var(--line); padding-top: 22px; color: var(--ink-3); font-size: .84rem; }
+  footer p { margin: 0 0 8px; max-width: 76ch; }
+
+  @media (max-width: 620px) {
+    .find { grid-template-columns: 52px 1fr; }
+    .find .when { grid-column: 2; justify-self: start; margin-top: 4px; }
+    .phase { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Security review &middot; koreader_companion v1.4.0 &middot; 11 Aug 2026</p>
+  <h1>The injection bugs aren&rsquo;t there. The denial-of-service is.</h1>
+  <p class="standfirst">
+    Reviewed for exposure on a <strong>public</strong> Nextcloud instance &mdash; untrusted registered users,
+    plus anonymous internet traffic reaching <span class="m">/opds/*</span> and <span class="m">/sync/*</span>.
+    On the classic vulnerability classes this code is <strong>better than most Nextcloud apps</strong>: every
+    query is parameterised, file ownership is scoped through the user folder, and the new EPUB reader&rsquo;s
+    sandboxing is correct. The problem is somewhere less glamorous. <strong>Nothing rate-limits anything</strong>,
+    and several endpoints do unbounded work per request.
+  </p>
+
+  <dl class="verdict">
+    <div><dt>Ship publicly today</dt><dd class="n-crit">Not yet<small>H1b still open</small></dd></div>
+    <div><dt>High</dt><dd class="n-warn">1<small>half fixed</small></dd></div>
+    <div><dt>Medium</dt><dd class="n-ok">5 of 6<small>fixed</small></dd></div>
+    <div><dt>Low</dt><dd class="n-ok">6 of 6<small>fixed</small></dd></div>
+    <div><dt>Injection / XSS / RCE</dt><dd class="n-ok">0<small>none found</small></dd></div>
+  </dl>
+
+  <div class="repro">
+    <p class="eyebrow">Remediation status &mdash; read this before the findings below</p>
+    <p>
+      Most of this deck has since been implemented; the findings are kept in full because the reasoning
+      is the point. <strong>Two things are still open, and one of them is the deployment gate.</strong>
+    </p>
+    <pre><code><b>Still open</b>
+  H1b  listings re-scan and re-parse the whole folder per request;
+       getBookById() is still an O(library) scan          <b>&larr; deployment gate</b>
+  M2   IUserSession::setUser() from a header on a public route
+
+<b>Fixed</b>
+  H1a  tryAutoIndex bounded to 200 files per request
+  H1c  batchRename rate-limited (2 per 5 min); job move still owed
+  M1   sync password now stored under password_hash(), legacy MD5
+       accepted once and transparently upgraded; 8-char server-side floor
+  M3   composer audit + npm audit added to CI
+  M4   generic client errors, exceptions logged not returned
+  M5   server-side extension allow-list + 512 MB cap + filename sanitising
+  M6   folder setting validated (empty no longer resolves to the user root)
+  L1-L6  all six
+  plus  the metadata-revert bug, and an "Extract metadata now" button</code></pre>
+    <p class="note">
+      <strong>Verified on a live Nextcloud 34.0.2.</strong> OPDS 29/29 and KOReader 13/13. The M1
+      migration was proved on the real upgrade path: stored as a bare MD5, first sync authenticated via
+      the legacy branch, and the value came back as <span class="m">$2y$12$&hellip;</span> with all tests
+      still green. Two KOReader failures seen mid-work turned out to be a dev-stack bug &mdash;
+      <span class="m">provision.sh</span> had been silently failing to set the sync password, because
+      <span class="m">occ user:setting</span> cannot overwrite a typed value and its exit code was
+      ignored. Worth knowing: the suite's <span class="m">PUT progress update</span> assertion passes on
+      a 401 body, so it cannot tell working auth from broken auth.
+      <strong>Not covered by any test:</strong> M5, M6 and L1 were verified by reading, not by running.
+    </p>
+  </div>
+
+  <div class="repro">
+    <p class="eyebrow">The one number that decides this</p>
+    <p>
+      <span class="m">#[AnonRateLimit]</span> and <span class="m">#[UserRateLimit]</span> appear
+      <strong>zero times</strong> in the codebase. Meanwhile a single sync request with an unrecognised
+      document hash walks the entire library, opens every file, and logs about twelve lines per file:
+    </p>
+    <pre><code>$ grep -rc "AnonRateLimit\|UserRateLimit" lib/
+<b>0</b>
+
+# one PUT /sync/syncs/progress with a random hash, 5000-book library:
+tryAutoIndex()                  &rarr; getBooks()          full recursive scan + parse
+  foreach book (5000&times;)          &rarr; getById + fopen()    <b>5000 file opens</b>
+    generateBinaryHashFromNode  &rarr; 12&times; logger->info    <b>~60,000 log lines</b>
+
+# and the throttle does not fire, because it only registers on auth *failure*:
+KoreaderController.php:141      $response->throttle(...)   # inside the 401 branch only</code></pre>
+    <p class="note">
+      Cost to the attacker: one HTTP request with a random 32-hex string. Repeat in a loop.
+    </p>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Finding 1 of 13 &middot; High</p>
+    <h2>H1 &mdash; Remote resource amplification, unthrottled</h2>
+    <p>
+      Three separate paths turn one cheap request into work proportional to the whole library. None of them
+      is rate-limited, and two are reachable by an anonymous caller with valid OPDS credentials or a sync
+      password.
+    </p>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">H1a</span>
+    <span class="what"><span class="m">tryAutoIndex()</span> scans and opens the entire library</span>
+    <span class="when">Anon + sync creds</span>
+    <div class="where">
+      <p>
+        <span class="m">KoreaderController.php:350-424</span>. Fires on any
+        <span class="m">PUT /sync/syncs/progress</span> whose <span class="m">document</span> hash is not
+        already mapped. Iterates every book, calls <span class="m">getById()</span> and
+        <span class="m">fopen()</span> per file, and hashes each one. Unknown hashes are also
+        <em>deliberately</em> stored anyway (<span class="m">:168-170</span>), so the attacker controls
+        both the CPU cost and a growing table.
+      </p>
+      <p>
+        <span class="m">DocumentHashGenerator</span> emits up to 12 <span class="m">logger-&gt;info</span>
+        calls per file &mdash; 21 of the 45 info-level calls in <span class="m">lib/</span> live in that one
+        class. Log-disk exhaustion arrives before CPU exhaustion.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> bound the scan (cap files per request, or move auto-indexing to a background
+      job keyed by hash), and demote the per-offset logging to <span class="m">debug</span>.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">H1b</span>
+    <span class="what">Every listing re-scans and re-parses the whole folder</span>
+    <span class="when">Anon + OPDS creds</span>
+    <div class="where">
+      <p>
+        <span class="m">BookService::getBooks()</span> &rarr; <span class="m">scanFolder()</span> &rarr;
+        <span class="m">extractMetadata()</span> per file
+        (<span class="m">BookService.php:63-98, 550-619</span>). Runs on every OPDS feed, every facet feed and
+        every web listing. <span class="m">getBookById()</span> (<span class="m">:1216-1226</span>) then does
+        an O(library) linear scan over that result &mdash; used by
+        <span class="m">bookFile</span>, <span class="m">opds#download</span> and
+        <span class="m">opds#thumbnail</span>, so a download costs a full library scan.
+      </p>
+      <p>None of the 15 OPDS methods carries a rate-limit or brute-force attribute.</p>
+    </div>
+    <p class="fix"><b>Fix:</b> serve listings from <span class="m">oc_koreader_metadata</span> and let the
+      background job own extraction; look books up by id in SQL, not by scanning.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag crit">H1c</span>
+    <span class="what"><span class="m">batchRename</span> holds a PHP worker for minutes</span>
+    <span class="when">Authenticated</span>
+    <div class="where">
+      <p>
+        <span class="m">SettingsController.php:98-136</span> renames the entire library synchronously inside
+        the request, with <span class="m">usleep(500000)</span> in the loop
+        (<span class="m">:205</span>). Half a second of deliberate sleep per chunk, in-request.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> move to <span class="m">IJobList</span> &mdash; the pattern
+      <span class="m">ExtractMetadataJob</span> already establishes.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Findings 2&ndash;7 &middot; Medium</p>
+    <h2>Credential design, auth boundaries, and hygiene</h2>
+    <p>
+      None of these is remotely exploitable on its own. Each one either widens the blast radius of a
+      different compromise or removes a layer that should be there.
+    </p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">M1</span>
+    <span class="what">The sync credential is an unsalted MD5 that is itself the verifier</span>
+    <span class="when w">Blast radius</span>
+    <div class="where">
+      <p>
+        <span class="m">PageController.php:152</span> stores <span class="m">md5($password)</span>;
+        <span class="m">KoreaderController.php:213</span> compares the wire value straight against it. The
+        stored value <em>is</em> the credential, so anything that reads config &mdash; a database backup, a
+        read primitive in any other installed app &mdash; yields a directly replayable secret
+        <strong>and</strong> a trivially crackable password. Users reuse passwords; this one is one rainbow-table
+        lookup from their Nextcloud account.
+      </p>
+      <p>
+        There is no server-side password policy: <span class="m">:146</span> checks only
+        <span class="m">empty()</span>, so a one-character sync password is accepted. The 4-character minimum
+        lives only in the browser (<span class="m">ConnectionView.vue:40</span>).
+        <span class="m">FLAG_SENSITIVE</span> (<span class="m">:159</span>) does encrypt at rest, which
+        genuinely helps, but does not change the design.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> KOReader&rsquo;s protocol mandates MD5 on the wire &mdash; that cannot change.
+      What can: store <span class="m">password_hash()</span> of the received MD5 and verify with
+      <span class="m">password_verify()</span>, and enforce a length floor server-side.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">M2</span>
+    <span class="what"><span class="m">setUser()</span> driven by a request header on a public route</span>
+    <span class="when w">Auth boundary</span>
+    <div class="where">
+      <p>
+        <span class="m">KoreaderController.php:221</span> and <span class="m">:364</span>. On routes marked
+        <span class="m">#[PublicPage]</span>, the app installs a session user chosen by the
+        <span class="m">x-auth-user</span> header and grants full filesystem context for the rest of the
+        request. The MD5 check does gate it, so this is not an escalation today &mdash; but it makes every
+        downstream bug in that request a bug that runs as someone else, and it mutates request-global state.
+      </p>
+      <p>
+        Related: <span class="m">getCurrentSyncUser()</span> (<span class="m">:226-245</span>) re-reads the
+        same header and trusts it <em>without</em> re-verifying the key. Safe only because of call ordering.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> already tracked as <span class="m">2.14b</span> &mdash; pass an explicit user
+      into <span class="m">BookService</span> instead of mutating the session. This review raises its
+      priority.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">M3</span>
+    <span class="what">Untrusted-file parsers, with no dependency auditing in CI</span>
+    <span class="when w">Supply chain</span>
+    <div class="where">
+      <p>
+        <span class="m">smalot/pdfparser</span>, <span class="m">kiwilan/php-archive</span> (which shells out
+        to <span class="m">unrar</span>), <span class="m">ZipArchive</span> and client-side
+        <span class="m">epubjs ^0.3.93</span> all parse attacker-supplied files. epub.js is effectively
+        unmaintained.
+      </p>
+      <p>
+        CI runs <span class="m">npm ci --no-audit</span> and never runs
+        <span class="m">composer audit</span>. There is no static analysis at all.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> add <span class="m">composer audit</span> and <span class="m">npm audit</span>
+      to <span class="m">ci.yml</span>, plus psalm &mdash; closing the deferred
+      <span class="m">4.12</span>.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">M4</span>
+    <span class="what">Internal exception text returned to clients</span>
+    <span class="when w">Info leak</span>
+    <div class="where">
+      <p>
+        <span class="m">PageController.php:276, 312, 405, 469</span> and
+        <span class="m">SettingsController.php:134</span> return
+        <span class="m">$e-&gt;getMessage()</span> in the JSON body. That surfaces absolute filesystem paths
+        and database/driver detail to any authenticated user.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> log the exception, return a generic message. The listener already models this
+      with its <span class="m">\Throwable</span> guard.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">M5</span>
+    <span class="what">No server-side upload validation; filename reaches the filesystem unsanitised</span>
+    <span class="when w">Hardening</span>
+    <div class="where">
+      <p>
+        <span class="m">uploadBook</span> (<span class="m">:181-278</span>) validates only the publication
+        year. Extension filtering is browser-only
+        (<span class="m">UploadModal.vue:132-135</span>); <span class="m">SUPPORTED_EXTENSIONS</span> gates
+        <em>indexing</em>, never upload. No size cap in app code.
+      </p>
+      <p>
+        The raw <span class="m">$originalFilename</span> reaches <span class="m">newFile()</span>
+        (<span class="m">:209-210</span>) and is concatenated into a <span class="m">move()</span> target
+        (<span class="m">:260</span>) without passing through
+        <span class="m">FilenameService::sanitizeFilename</span> unless auto-rename happens to be on &mdash;
+        so core&rsquo;s path validation is the only thing standing there. That helper is also incomplete: it
+        strips shell-hostile characters but not leading dots, <span class="m">..</span>, or control bytes,
+        and its <span class="m">substr</span> can cut mid-UTF-8 (<span class="m">FilenameService.php:57-72</span>).
+      </p>
+      <p>
+        Bounded impact &mdash; a user can already write anything to their own storage over WebDAV, so this is
+        contract honesty and defence in depth, not privilege escalation. On exception, the
+        extract-metadata temp file also leaks into the user&rsquo;s folder root
+        (<span class="m">:298-311</span>).
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> validate against <span class="m">SUPPORTED_EXTENSIONS</span> plus a size cap
+      server-side, and always route the filename through the sanitiser.</p>
+  </div>
+
+  <div class="find">
+    <span class="tag warn">M6</span>
+    <span class="what">The library folder setting is written with zero validation</span>
+    <span class="when w">Amplifies H1</span>
+    <div class="where">
+      <p>
+        <span class="m">SettingsController::setFolder</span> (<span class="m">:54-82</span>) writes whatever
+        string arrives straight to config. It never checks that the value is non-empty, that it exists, or
+        that it is a folder rather than a file.
+      </p>
+      <p>
+        An empty value makes <span class="m">$userFolder-&gt;get('')</span> resolve to the user&rsquo;s
+        <strong>root</strong> &mdash; at which point every listing recursively scans and parses the
+        user&rsquo;s entire Nextcloud storage, on every request. That is H1b with the brakes off. The value
+        is also interpolated into path matching as
+        <span class="m">strpos($path, "/files/$folderName/")</span>
+        (<span class="m">FileCreationListener.php:86</span>), which wants a traversal check on this
+        Nextcloud version.
+      </p>
+      <p>
+        Separately: any change silently fires <span class="m">clearLibraryMetadata()</span>
+        (<span class="m">:71</span>), so a typo discards the index.
+      </p>
+    </div>
+    <p class="fix"><b>Fix:</b> reject empty values, resolve the path and confirm it is a folder inside the
+      user folder before persisting.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Findings 8&ndash;13 &middot; Low</p>
+    <h2>Worth fixing, none urgent</h2>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <caption>Each verified by reading the cited line, not inferred from patterns.</caption>
+      <thead>
+        <tr><th scope="col">#</th><th scope="col">Finding</th><th scope="col">Location</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag low">L1</span></td>
+          <td><strong>Unescaped filename in <span class="m">Content-Disposition</span>.</strong> A
+            <span class="m">"</span> in a book name breaks out of the quoted value. No RFC&nbsp;6266
+            <span class="m">filename*</span>, so non-ASCII titles mangle. Newly reachable from the
+            <span class="m">bookFile</span> route.</td>
+          <td><span class="m">BookService.php:1246</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag low">L2</span></td>
+          <td><strong><span class="m">simplexml_load_string</span> without
+            <span class="m">LIBXML_NONET</span></strong> on book-supplied XML. libxml&nbsp;&ge;&nbsp;2.9
+            defaults already block XXE, so this is consistency rather than a live hole &mdash; the app&rsquo;s
+            own <span class="m">EpubCoverProvider.php:144-151</span> does it correctly.</td>
+          <td><span class="m">BookService.php:1021, 1313, 1329</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag low">L3</span></td>
+          <td><strong>OPDS swallows <span class="m">MaxDelayReached</span> into a plain 401</strong> and never
+            calls <span class="m">throttle()</span>; no brute-force attribute on any of the 15 methods. Core&rsquo;s
+            <span class="m">logClientIn()</span> still applies the delay, so this is semantics, not a bypass.</td>
+          <td><span class="m">OpdsController.php:63-67</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag low">L4</span></td>
+          <td><strong>Username enumeration by timing.</strong> Auth returns early when the user does not
+            exist, before reaching <span class="m">hash_equals</span> &mdash; a measurable difference between
+            &ldquo;no such user&rdquo; and &ldquo;wrong key&rdquo;.</td>
+          <td><span class="m">KoreaderController.php:194-197</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag low">L5</span></td>
+          <td><strong>Reading habits logged at info level on every sync request</strong> &mdash; titles,
+            authors, document hashes, per user. A privacy regression for an app whose pitch is privacy-first,
+            and it feeds the H1a log volume.</td>
+          <td><span class="m">KoreaderController.php:316-321</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag low">L6</span></td>
+          <td><strong>Unbounded attacker-controlled progress rows.</strong> Unknown documents are stored
+            anyway, with no format check on <span class="m">document</span> &mdash; no length or hex
+            validation, no per-user cap.</td>
+          <td><span class="m">KoreaderController.php:157-173</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Reviewed, and fine</p>
+    <h2>What the review cleared</h2>
+    <p>
+      Recording these explicitly so they are not re-litigated later, and so the one load-bearing assumption
+      in the reader is written down where a future change will trip over it.
+    </p>
+  </div>
+
+  <div class="repro good">
+    <p class="eyebrow">The new EPUB reader is not a vulnerability</p>
+    <p>
+      An in-browser reader that renders attacker-authored XHTML inside the Nextcloud origin is exactly the
+      shape of a stored-XSS-to-account-takeover bug. This one is built correctly &mdash; but by a chain of
+      three independent controls, and it takes all three:
+    </p>
+    <pre><code>epubjs iframe.js:97   iframe.sandbox = "allow-same-origin"   <b>no allow-scripts</b>
+ReaderModal.vue:180   allowScriptedContent: false            <b>keeps it that way</b>
+PageController:127-133 CSP adds blob: to frame/style/font/
+                       image/media &mdash; <b>never script-src</b></code></pre>
+    <p class="note">
+      Blob-URL documents inherit the parent CSP, so even a sandbox regression would still meet
+      <span class="m">script-src 'self'</span>. External fetches are blocked too, which closes CSS-based
+      exfiltration. <strong>The regression to guard:</strong> flipping
+      <span class="m">allowScriptedContent</span> to <span class="m">true</span>, or bumping epub.js past a
+      change in its sandbox defaults, converts book content into same-origin script execution. Worth a
+      comment at the call site and a note in the upgrade checklist.
+    </p>
+  </div>
+
+  <div class="cols" style="margin-top: 28px;">
+    <div>
+      <p class="lab">Checked, clean</p>
+      <h4>No injection surface found</h4>
+      <ul>
+        <li><strong>SQL:</strong> every query uses <span class="m">IQueryBuilder</span> with
+          <span class="m">createNamedParameter</span>. No concatenated SQL anywhere in
+          <span class="m">lib/</span>.</li>
+        <li><strong>ORDER BY</strong> is allow-listed through a <span class="m">switch</span>
+          (<span class="m">BookService.php:127-141</span>) &mdash; no sort-key injection.</li>
+        <li><strong>Dangerous primitives:</strong> no <span class="m">exec</span>,
+          <span class="m">eval</span>, <span class="m">unserialize</span>, or outbound HTTP in
+          <span class="m">lib/</span>.</li>
+        <li><strong>Frontend:</strong> no <span class="m">v-html</span>, no
+          <span class="m">innerHTML</span>. <span class="m">templates/page.php</span> is a bare mount div
+          with no interpolation.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="lab">Checked, correct</p>
+      <h4>Authorisation holds</h4>
+      <ul>
+        <li><strong>Ownership</strong> is enforced via
+          <span class="m">getUserFolder($uid)-&gt;getById($id)</span> &mdash; a cross-user file id returns
+          an empty array, so it 404s. Every table touch carries
+          <span class="m">AND user_id = &lt;session uid&gt;</span>.</li>
+        <li><strong>CSRF</strong> is enforced on all writers;
+          <span class="m">#[NoCSRFRequired]</span> survives only on readers.</li>
+        <li><strong>OPDS auth</strong> delegates to <span class="m">logClientIn()</span>, so app passwords,
+          LDAP and 2FA all work &mdash; the correct pattern.</li>
+        <li><strong>No secrets committed.</strong> Every
+          <span class="m">test123</span>/<span class="m">admin</span> hit is dev or CI scaffolding.
+          <span class="m">getKoreaderPassword</span> returns only
+          <span class="m">has_password</span>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Explicitly not findings</h3>
+  <p class="body">
+    The unauthenticated <span class="m">/sync/healthcheck</span> is required by the kosync protocol and
+    returns a static string &mdash; it reveals only that the app is installed. And the double
+    <span class="m">htmlspecialchars</span> in the facet feeds
+    (<span class="m">OpdsController.php:594, 652, 711, 770, 829</span> against
+    <span class="m">:222</span>) is a real bug that puts <span class="m">&amp;amp;amp;</span> in
+    published feeds &mdash; but it is a <em>correctness</em> defect, not a security one. Over-escaping never
+    was the dangerous direction.
+  </p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Order of work</p>
+    <h2>Cheapest thing that buys the most, first</h2>
+    <p>
+      Only the first step gates public deployment. The rest is defence in depth and can land incrementally.
+    </p>
+  </div>
+
+  <div class="phase">
+    <div class="pn">Step 1</div>
+    <div>
+      <h4>Rate-limit, and bound the auto-index</h4>
+      <p>
+        <span class="m">#[UserRateLimit]</span>/<span class="m">#[AnonRateLimit]</span> on upload,
+        extract-metadata, batch-rename, <span class="m">bookFile</span> and the OPDS feeds; cap or defer
+        <span class="m">tryAutoIndex</span>; demote the <span class="m">DocumentHashGenerator</span> info
+        logs to debug. Closes H1 and most of L5. <strong>This is the deployment gate.</strong>
+      </p>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="pn">Step 2</div>
+    <div>
+      <h4>Stop leaking internals, validate inputs</h4>
+      <p>
+        Generic client-facing errors (M4); server-side upload allow-list, size cap and filename sanitising
+        (M5); reject empty and non-folder library paths (M6). All small, all local.
+      </p>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="pn">Step 3</div>
+    <div>
+      <h4>Close the CI gap</h4>
+      <p>
+        <span class="m">composer audit</span>, <span class="m">npm audit</span> and psalm in
+        <span class="m">ci.yml</span> (M3) &mdash; which also finally closes the long-deferred
+        <span class="m">4.12</span>. Cheapest lasting win in the list, because it keeps working after this
+        review is stale.
+      </p>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="pn">Step 4</div>
+    <div>
+      <h4>Rework the sync credential and the session hack</h4>
+      <p>
+        Salted hash plus a server-side length floor (M1), then drop
+        <span class="m">IUserSession::setUser()</span> in favour of an explicit user parameter (M2 /
+        <span class="m">2.14b</span>). Both touch the auth path, so they want the integration suites green
+        on either side and are best done together, last.
+      </p>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="pn">Step 5</div>
+    <div>
+      <h4>The L-series</h4>
+      <p>
+        Header escaping, <span class="m">LIBXML_NONET</span>, OPDS throttle semantics, constant-time
+        user lookup, document-hash validation. Mechanical.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Side finding</p>
+    <h2><span class="m">tasks.md</span> no longer describes the code</h2>
+    <p>
+      The second question asked was whether everything is implemented. Substantially yes &mdash; the
+      Nextcloud&nbsp;34 modernisation is done, and the five items marked open really are open
+      (<span class="m">2.14b</span>, <span class="m">2.21b</span>, <span class="m">2.25</span>,
+      <span class="m">4.12</span>, <span class="m">6.6</span>). But the file has drifted in both directions,
+      which makes it unsafe to read as status.
+    </p>
+  </div>
+
+  <div class="repro">
+    <p class="eyebrow">Not a security bug &mdash; but it loses user data</p>
+    <p>
+      Chasing whether a job could be triggered on demand turned up a defect in the
+      <span class="m">2.24</span> background-job change. A web-UI upload extracts metadata
+      <em>synchronously</em> (<span class="m">PageController.php:214, 267</span>) &mdash; but the file
+      listener has already queued <span class="m">ExtractMetadataJob</span> for the same file id, and
+      <span class="m">indexFile()</span> has no state guard:
+    </p>
+    <pre><code>upload  &rarr; markFilePending()      indexing_state = <b>pending</b>
+        &rarr; jobList->add(ExtractMetadataJob, fileId)
+        &rarr; storeBookMetadata()     writes the user's typed title/author
+                                  <b>but never clears indexing_state</b>
+
++5 min  &rarr; cron &rarr; indexFile() &rarr; updateFileMetadata()
+          BookService.php:462-484   <b>SET every column = re-extracted value</b></code></pre>
+    <p class="note">
+      Two visible symptoms: the book claims to be &ldquo;still processing&rdquo; forever after a web
+      upload, and whatever the user typed into the upload form is silently replaced by the file&rsquo;s
+      embedded metadata on the next cron run. <strong>Scope of evidence:</strong> the
+      <span class="m">pending</span>&nbsp;&rarr;&nbsp;<span class="m">done</span> transition and the
+      re-extraction were confirmed live on the dev stack (a stuck book went from a filename-derived
+      title to <span class="m">Brave New World / Aldous Huxley</span> once the worker ran); the
+      overwrite of *user-typed* fields is read from
+      <span class="m">updateFileMetadata()</span>&rsquo;s unconditional <span class="m">SET</span> list,
+      not separately reproduced. Tracked as <span class="m">8.1</span>, with a regression test. Fix: skip
+      rows already <span class="m">STATE_DONE</span> in <span class="m">indexFile()</span>, and let the
+      upload path mark itself done.
+    </p>
+    <p class="note">
+      Related, and the reason this went unnoticed: the dev stack has <strong>no cron service at all</strong>
+      (<span class="m">compose.yaml</span>), so the queue never drains and folder-drop uploads stay
+      <span class="m">pending</span> forever. The pipeline is correct; nothing was running it.
+      Tracked as <span class="m">9.1&ndash;9.5</span>.
+    </p>
+  </div>
+
+  <div class="scroller" style="margin-top: 28px;">
+    <table>
+      <caption>Every row verified against the working tree.</caption>
+      <thead>
+        <tr><th scope="col">Item</th><th scope="col">Claims</th><th scope="col">Actually</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="m">2.24</span></td>
+          <td><span class="tag crit">blocked</span> &ldquo;needs a design decision&rdquo;</td>
+          <td><strong>Shipped.</strong> <span class="m">ExtractMetadataJob.php</span>,
+            <span class="m">FileCreationListener.php:47-72</span>,
+            <span class="m">Version0008</span>, pending-state UI. Commit
+            <span class="m">0fa8572</span>.</td>
+        </tr>
+        <tr>
+          <td><span class="m">3.9</span></td>
+          <td><span class="tag warn">in progress</span> &ldquo;mobi kept, not dropped&rdquo;</td>
+          <td><strong>Dropped.</strong> Zero <span class="m">mobi</span> references in
+            <span class="m">lib/</span> or <span class="m">src/</span>. Commit
+            <span class="m">8d454b1</span>. Also invalidates 3.7&rsquo;s &ldquo;PDF/MOBI &rarr; 404&rdquo;.</td>
+        </tr>
+        <tr>
+          <td><span class="m">2.1</span></td>
+          <td><span class="tag ok">done</span> &ldquo;<span class="m">min=34 max=35</span>&rdquo;, v1.3.0</td>
+          <td><span class="m">info.xml</span> pins <span class="m">max-version="34"</span>; version is
+            1.4.0. The narrowing was intentional, never written down.</td>
+        </tr>
+        <tr>
+          <td><span class="m">4.13</span></td>
+          <td><span class="tag ok">done</span> &ldquo;NC 34/35 matrix&rdquo;</td>
+          <td>The matrix is <em>PHP</em> 8.2&ndash;8.5. The integration job runs against NC&nbsp;34 only.
+            No 35 leg.</td>
+        </tr>
+        <tr>
+          <td><span class="m">1.11</span></td>
+          <td><span class="tag ok">done</span> &ldquo;Retire <span class="m">reset_and_deploy.sh</span>&rdquo;</td>
+          <td>Still present as a 33-line tombstone that <span class="m">exit 1</span>s. Effectively retired;
+            say so, or delete it.</td>
+        </tr>
+        <tr>
+          <td><em>absent</em></td>
+          <td>&mdash;</td>
+          <td><strong>The EPUB reader has no task at all.</strong>
+            <span class="m">ReaderModal.vue</span>, the <span class="m">page#bookFile</span> route and the
+            CSP change are uncommitted and undocumented.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p>
+    <strong>Method.</strong> Manual review of <span class="m">lib/</span>,
+    <span class="m">src/</span>, <span class="m">appinfo/routes.php</span> and
+    <span class="m">.github/workflows/</span> at the current working tree (v1.4.0, uncommitted reader work
+    included). Every finding cites the line it was read from. Nothing here was confirmed by exploitation
+    &mdash; no attempt was made to run any of it against a live instance, so severities are reasoned from
+    code, not measured.
+  </p>
+  <p>
+    <strong>Known gaps in this review.</strong> Two things are asserted from code reading and deserve a live
+    check before anyone relies on them: whether <span class="m">Folder::get()</span> normalisation blocks
+    <span class="m">..</span> escape on this Nextcloud version (M6), and whether the
+    <span class="m">unrar</span> subprocess in <span class="m">kiwilan/php-archive</span> is reachable with
+    attacker-controlled arguments rather than just attacker-controlled file content (M3). Third-party CVE
+    status for <span class="m">smalot/pdfparser</span>, <span class="m">kiwilan/php-archive</span> and
+    <span class="m">epubjs</span> was not checked &mdash; that is what Step&nbsp;3 automates.
+  </p>
+  <p>
+    Companion document: <span class="m">docs/nc34-audit.html</span> &mdash; the Nextcloud&nbsp;34
+    compatibility audit, which covers a different question and already records the bare-MD5 auth and the
+    CSRF exemptions from the platform-migration angle.
+  </p>
+</footer>
+
+</div>

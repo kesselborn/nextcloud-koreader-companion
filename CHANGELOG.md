@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added — in-browser EPUB reader
+- Read button on every EPUB cover opens a full-screen reader built on
+  [epub.js](https://github.com/futurepress/epub.js) 0.3.93: paginated view,
+  arrow-key and button navigation, chapter name, a position slider and font-size
+  controls
+- Reading position and font size persist in `localStorage`, per book. This is
+  deliberately separate from KOReader's own progress sync, which speaks its own
+  device-to-device protocol over `/sync`
+- `GET /books/{id}/file` serves the raw file over session auth; the OPDS
+  download route needs Basic Auth and `/f/{fileId}` only redirects into Files,
+  so neither could be fetched from the web UI
+- Page CSP now allows `blob:` for frames, styles, fonts, images and media —
+  epub.js unpacks the book in the browser and hands its resources to a sandboxed
+  iframe as blob URLs. Scripts stay disallowed; book content does not run any
+- epub.js is loaded through a dynamic import, so only readers pay its ~380 kB
+
+### Added — extract metadata on demand
+- An "Extract metadata now" button appears in the library while any book is still
+  being processed, and disappears once none are. Nextcloud cannot be asked to run
+  one specific background job, so `POST /books/process-pending` does the work in
+  the request instead of poking the queue — bounded to 25 books per press, and it
+  reports how many are left
+
+### Security
+- The KOReader sync password is no longer stored as a bare unsalted MD5. The
+  protocol still sends MD5 over the wire, but the server now keeps it under
+  `password_hash()`, so the stored value is no longer a replayable credential.
+  Existing passwords keep working and are upgraded on the next sync — no action
+  needed. Minimum length is now enforced server-side
+- Rate limits on upload, metadata extraction, batch rename and file downloads;
+  brute-force protection on every OPDS endpoint, which now answers 429 instead of
+  401 once the platform starts delaying a client
+- Sync auto-indexing is bounded per request. Previously one sync carrying an
+  unknown document hash would open every file in the library
+- Uploads are validated server-side (type and size) instead of only in the
+  browser, and filenames are sanitised before they reach storage
+- The library folder setting is validated. An empty value used to resolve to the
+  whole of a user's Nextcloud and get scanned on every request
+- Errors no longer return internal exception text — no more absolute paths or
+  database driver messages reaching clients
+- Reading activity is no longer written to the server log at info level
+
+### Fixed
+- Metadata typed into the upload form is no longer silently replaced by the file's
+  own embedded metadata on the next cron run
+- Facet feeds no longer double-escape titles, so an `&` in an author name is no
+  longer published as `&amp;amp;`
+- `dev/provision.sh` no longer reports success when setting the sync password
+  actually failed
+
 ## [1.4.0] - 2026-08-11
 
 A full migration from Nextcloud 30–31 to Nextcloud 34. The app did not run at
