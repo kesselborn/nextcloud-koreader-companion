@@ -309,7 +309,11 @@ export default {
 	&__toolbar {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: center;
+		// flex-end, not center: the sort control carries a label above it and the
+		// search field does not, so centring left the two input boxes sitting at
+		// different heights. Aligning on the bottom edge lines the boxes up
+		// regardless of what sits above them.
+		align-items: flex-end;
 		gap: calc(var(--default-grid-baseline) * 3);
 		margin-block-end: calc(var(--default-grid-baseline) * 4);
 	}
@@ -342,6 +346,9 @@ export default {
 	}
 
 	&__count {
+		// The row is bottom-aligned for the inputs' sake; this is plain text, so
+		// centre it against the boxes rather than dropping it to their baseline.
+		align-self: center;
 		color: var(--color-text-maxcontrast);
 		font-size: .9em;
 		margin-inline-start: auto;
