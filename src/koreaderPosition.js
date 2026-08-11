@@ -153,6 +153,10 @@ export async function koreaderPointerToCfi(book, xpointer) {
 	}
 
 	try {
+		// The spine is only populated once the package document has been parsed.
+		// rendition.display() waits for this internally, but this runs before it.
+		await book.ready
+
 		const section = book.spine.get(parsed.spineIndex)
 		if (!section) {
 			return null
@@ -208,9 +212,11 @@ function pathFromNode(element) {
 
 		const siblings = elementsNamed(parent, name)
 		const index = siblings.indexOf(current) + 1
-		// KOReader omits [1] only for the body step; keeping it explicit elsewhere
-		// matches what real devices emit.
-		steps.unshift(`${name}[${index}]`)
+		// Omit [1], which is what real devices emit: a Readest position reads
+		// `/body/div/p[28]`, not `/body/div[1]/p[28]`. Standard XPath treats the two
+		// identically, but there is no reason to hand a device's parser a shape it
+		// never produces itself.
+		steps.unshift(index > 1 ? `${name}[${index}]` : name)
 		current = parent
 	}
 

@@ -3,11 +3,16 @@
 		size="full"
 		:name="book.title"
 		:close-button-contained="false"
-		@close="$emit('close')">
+		@close="requestClose">
 		<div class="reader">
 			<div class="reader__header">
 				<span class="reader__title">{{ book.title }}</span>
 				<span v-if="chapter" class="reader__chapter">{{ chapter }}</span>
+				<!-- Say so when the book was opened somewhere the reader did not
+				     leave it: being moved without explanation is disorienting. -->
+				<span v-if="openedFrom" class="reader__resumed">
+					{{ t('koreader_companion', 'Resumed from {device}', { device: openedFrom }) }}
+				</span>
 				<div class="reader__zoom">
 					<NcButton
 						:aria-label="t('koreader_companion', 'Smaller text')"
@@ -66,6 +71,15 @@
 				</div>
 			</div>
 
+			<!-- Asked, never assumed: this position is shared with real devices, so
+			     saving it silently could move where a Kobo resumes. -->
+			<NcDialog
+				v-if="askingToSave"
+				:name="t('koreader_companion', 'Save reading position?')"
+				:message="t('koreader_companion', 'Your devices will resume this book here.')"
+				:buttons="saveDialogButtons"
+				@closing="close" />
+
 			<div class="reader__footer">
 				<input
 					type="range"
@@ -89,9 +103,11 @@
 
 <script>
 import { markRaw } from 'vue'
+import { showError, showSuccess } from '@nextcloud/dialogs'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcModal from '@nextcloud/vue/components/NcModal'
 import AlertCircle from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ChevronLeft from 'vue-material-design-icons/ChevronLeft.vue'
@@ -99,7 +115,8 @@ import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
 import FormatFontSizeDecrease from 'vue-material-design-icons/FormatFontSizeDecrease.vue'
 import FormatFontSizeIncrease from 'vue-material-design-icons/FormatFontSizeIncrease.vue'
 
-import { fetchBookFile } from '../api.js'
+import { fetchBookFile, saveProgress } from '../api.js'
+import { cfiToKoreaderPointer, koreaderPointerToCfi } from '../koreaderPosition.js'
 
 // Where we left off, per book. Deliberately local: KOReader's own sync is
 // device-to-device over the /sync API and uses its own progress model, and
@@ -120,6 +137,7 @@ export default {
 		FormatFontSizeIncrease,
 		NcButton,
 		NcEmptyContent,
+		NcDialog,
 		NcLoadingIcon,
 		NcModal,
 	},
@@ -145,8 +163,32 @@ export default {
 			percent: 0,
 			chapter: '',
 			locationsReady: false,
+			// Set when the book was opened at a position synced from a device, so
+			// the reader can say so rather than silently moving the user.
+			openedFrom: '',
+			pendingPercentage: null,
+			saving: false,
+			askingToSave: false,
+			currentCfi: '',
 			fontSize: Number(localStorage.getItem(FONT_SIZE_KEY)) || 100,
 		}
+	},
+
+	computed: {
+		saveDialogButtons() {
+			return [
+				{
+					label: t('koreader_companion', 'Discard'),
+					callback: () => this.close(),
+				},
+				{
+					label: t('koreader_companion', 'Save'),
+					type: 'primary',
+					disabled: this.saving,
+					callback: () => this.saveAndClose(),
+				},
+			]
+		},
 	},
 
 	mounted() {
@@ -201,13 +243,106 @@ export default {
 				this.rendition.on('relocated', this.onRelocated)
 				this.rendition.on('keyup', this.onKey)
 
-				await this.rendition.display(localStorage.getItem(positionKey(this.book.id)) || undefined)
+				await this.rendition.display(await this.startingPosition())
 				this.ready = true
 				this.observeResize()
 				this.loadLocations()
 			} catch (error) {
 				this.error = t('koreader_companion', 'This book could not be opened')
 			}
+		},
+
+		/**
+		 * Closing: offer to sync the position, unless there is nothing to sync.
+		 */
+		requestClose() {
+			if (!this.ready || !this.currentPointer()) {
+				this.close()
+				return
+			}
+			this.askingToSave = true
+		},
+
+		close() {
+			this.askingToSave = false
+			this.$emit('close')
+		},
+
+		/**
+		 * The current position as a KOReader xpointer.
+		 *
+		 * Null when the reader has not settled, or when the position cannot be
+		 * expressed in KOReader's terms -- in which case there is nothing worth
+		 * offering to save, since a device could not use it.
+		 */
+		currentPointer() {
+			try {
+				// From the relocated event rather than rendition.currentLocation(),
+				// which is not reliably populated -- it is only set as a side effect
+				// of the same event.
+				const cfi = this.currentCfi
+				const contents = this.rendition?.getContents()?.[0]
+				if (!cfi || !contents) {
+					return null
+				}
+				return cfiToKoreaderPointer(this.epub, contents, cfi)
+			} catch (error) {
+				return null
+			}
+		},
+
+		async saveAndClose() {
+			const pointer = this.currentPointer()
+			if (!pointer) {
+				this.close()
+				return
+			}
+
+			this.saving = true
+			try {
+				await saveProgress(this.book.id, {
+					progress: pointer,
+					// The sync protocol carries a fraction, not a percent.
+					percentage: this.percent / 100,
+					device: t('koreader_companion', 'Nextcloud Web'),
+				})
+				showSuccess(t('koreader_companion', 'Reading position saved'))
+			} catch (error) {
+				showError(t('koreader_companion', 'Could not save your reading position'))
+			} finally {
+				this.saving = false
+				this.close()
+			}
+		},
+
+		/**
+		 * Where to open the book.
+		 *
+		 * A position synced from a device wins over the one this browser last
+		 * stored: it is the shared notion of "where I am", and picking it up is the
+		 * point of syncing at all. Its xpointer is converted to a CFI; if that
+		 * cannot be resolved -- CoolReader normalises markup as it renders, so its
+		 * paths do not always survive the round trip -- the percentage is used
+		 * instead, which is always present but only lands near the right page.
+		 */
+		async startingPosition() {
+			const local = localStorage.getItem(positionKey(this.book.id)) || undefined
+			const remote = this.book.progress
+
+			if (!remote?.progress_data) {
+				return local
+			}
+
+			const cfi = await koreaderPointerToCfi(this.epub, remote.progress_data)
+			if (cfi) {
+				this.openedFrom = remote.device || ''
+				return cfi
+			}
+
+			// Percentage needs the locations index, which is not built yet at open
+			// time; remember it and seek once it is.
+			this.pendingPercentage = Number(remote.percentage) / 100
+			return local
 		},
 
 		/**
@@ -231,6 +366,16 @@ export default {
 					}
 				}
 				this.locationsReady = true
+
+				// Fallback for a device position whose exact path did not resolve.
+				if (this.pendingPercentage !== null) {
+					const target = this.epub.locations.cfiFromPercentage(this.pendingPercentage)
+					this.pendingPercentage = null
+					if (target) {
+						await this.rendition.display(target)
+					}
+				}
+
 				this.onRelocated(this.rendition.currentLocation())
 			} catch (error) {
 				// A book without a position readout is still a readable book.
@@ -249,6 +394,7 @@ export default {
 			if (!cfi) {
 				return
 			}
+			this.currentCfi = cfi
 			localStorage.setItem(positionKey(this.book.id), cfi)
 			if (this.locationsReady) {
 				this.percent = Math.round(this.epub.locations.percentageFromCfi(cfi) * 100)
@@ -316,6 +462,12 @@ export default {
 	&__chapter {
 		color: var(--color-text-maxcontrast);
 		font-size: .9em;
+	}
+
+	&__resumed {
+		color: var(--color-text-maxcontrast);
+		font-size: .85em;
+		white-space: nowrap;
 	}
 
 	&__zoom {

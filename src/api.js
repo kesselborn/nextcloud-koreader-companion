@@ -41,6 +41,17 @@ export async function processPending() {
 	return data
 }
 
+/**
+ * Save a reading position so devices can pick it up.
+ *
+ * `progress` must be a KOReader xpointer, not a CFI -- the sync table is shared
+ * with real devices and they cannot parse a CFI.
+ */
+export async function saveProgress(id, { progress, percentage, device }) {
+	const { data } = await axios.put(url(`/books/${id}/progress`), { progress, percentage, device })
+	return data
+}
+
 export async function getSettings() {
 	const { data } = await axios.get(url('/settings'))
 	return data
