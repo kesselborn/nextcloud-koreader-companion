@@ -436,6 +436,13 @@ class BookService {
      * @return array{processed: int, failed: int, remaining: int}
      */
     public function processPendingBooks(string $userId, int $limit = self::PENDING_BATCH_LIMIT): array {
+        // Counted up front, before anything is written. Counting afterwards reads
+        // a table this request has just written, which is exactly what
+        // Nextcloud's "dirty table reads" assertion rejects -- the same trap that
+        // forced extraction out of the upload listener in the first place. It
+        // throws with debug enabled and is a silent landmine without it.
+        $pendingBefore = $this->countPendingBooks($userId);
+
         $qb = $this->db->getQueryBuilder();
         $result = $qb->select('file_id')
             ->from('koreader_metadata')
@@ -474,10 +481,12 @@ class BookService {
             }
         }
 
+        // Derived, not re-queried, for the reason above. Approximate if something
+        // else added books mid-run, which only affects a progress message.
         return [
             'processed' => $processed,
             'failed' => $failed,
-            'remaining' => $this->countPendingBooks($userId),
+            'remaining' => max(0, $pendingBefore - $processed),
         ];
     }
 
