@@ -4,10 +4,11 @@
 #
 # Idempotent: safe to re-run at any time. Deliberately uses only `occ` and
 # WebDAV, never the app's own web UI, so it works even while the app's PHP
-# fatals on Nextcloud 34 (which it currently does -- see docs/nc34-audit.html).
+# fatals on Nextcloud 34. That is no longer the case, but keeping provisioning
+# independent of the app's HTTP layer means a broken app never blocks setup.
 #
 # Env overrides:
-#   SERVICE=app31 BASE_URL=http://localhost:8081 ./dev/provision.sh
+#   SERVICE=appmysql BASE_URL=http://localhost:8092 ./dev/provision.sh
 #
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -62,6 +63,11 @@ occ config:system:set integrity.check.disabled --value=true --type=boolean
 occ config:system:set auth.bruteforce.protection.enabled --value=false --type=boolean
 # Don't litter every account with Nextcloud's sample files.
 occ config:system:set skeletondirectory --value=""
+# /var/www/html/apps is not writable in the container, so every `occ upgrade`
+# floods the log with "Cannot write into apps directory" while checking the app
+# store for updates to shipped apps. We install from custom_apps, so turn the
+# store off and get readable output.
+occ config:system:set appstoreenabled --value=false --type=boolean
 
 # ---------------------------------------------------------------- 3. deps
 if [ ! -f vendor/autoload.php ]; then
@@ -76,15 +82,10 @@ dc exec -T "$SERVICE" test -f "/var/www/html/custom_apps/$APP_ID/appinfo/info.xm
 
 say "enabling $APP_ID"
 if ! occ app:enable "$APP_ID" 2>&1; then
-  warn "app:enable refused -- appinfo/info.xml still declares max-version=31."
-  warn "Phase 2 bumps that to min=34 max=35. Forcing for now."
+  warn "app:enable refused. Check that appinfo/info.xml covers this server version."
+  warn "Forcing, so the rest of provisioning can still run."
   occ app:enable --force "$APP_ID"
 fi
-
-# Expect a benign warning here on PostgreSQL: migration Version0005 issues a
-# backtick-quoted DROP TABLE, which is MySQL-only syntax. It is wrapped in
-# try/catch, so it logs "Could not drop file tracking table" and continues --
-# meaning the table is never actually dropped on Postgres. Fixed in Phase 2.
 
 # ---------------------------------------------------------------- 5. user setup
 say "configuring user '$NC_USER'"
