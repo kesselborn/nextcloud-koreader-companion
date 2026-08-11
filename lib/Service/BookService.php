@@ -59,48 +59,14 @@ class BookService {
 
 
     /**
-     * Set while a caller is acting for a user it authenticated itself.
+     * The user this call is for.
      *
-     * The KOReader sync API is a #[PublicPage] with its own credential check, so
-     * there is no session to read. It used to manufacture one with
-     * IUserSession::setUser(), which installs a session user chosen by a request
-     * header and leaves it installed for the rest of the request -- every later
-     * line then runs as that user, whether or not it meant to.
-     *
-     * This is the narrow version of the same thing: an explicit acting user,
-     * scoped to one call and always unwound.
-     */
-    private ?string $actingUserId = null;
-
-    /**
-     * Run $callback with $userId as the acting user.
-     *
-     * @template T
-     * @param callable():T $callback
-     * @return T
-     */
-    public function runAs(string $userId, callable $callback) {
-        $previous = $this->actingUserId;
-        $this->actingUserId = $userId;
-
-        try {
-            return $callback();
-        } finally {
-            // finally, so an exception cannot leave the override in place for
-            // whatever runs next in this request.
-            $this->actingUserId = $previous;
-        }
-    }
-
-    /**
-     * The user this call is for: the explicit acting user if one is set,
-     * otherwise the session user.
+     * These entry points are reached from session-authenticated requests only.
+     * The KOReader sync API, which has no session, no longer calls into them at
+     * all -- it works from file ids and passes the user explicitly -- which is
+     * what made it possible to drop IUserSession::setUser().
      */
     private function currentUserId(): ?string {
-        if ($this->actingUserId !== null) {
-            return $this->actingUserId;
-        }
-
         return $this->userSession->getUser()?->getUID();
     }
 

@@ -253,8 +253,8 @@ class KoreaderController extends Controller {
         // session user chosen by a request header leaves it installed for the
         // rest of the request -- every later line then runs as that user whether
         // it meant to or not. Everything here already passes the user id
-        // explicitly; the one call that needed a user context now uses
-        // BookService::runAs().
+        // explicitly, and auto-indexing works from file ids rather than needing
+        // a user context at all.
         return true;
     }
     
@@ -424,40 +424,43 @@ class KoreaderController extends Controller {
                 'user' => $userId
             ]);
 
-            // Set user context for BookService
             $user = $this->userManager->get($userId);
             if (!$user) {
                 $this->logger->debug('Auto-index failed: user not found', ['user' => $userId]);
                 return false;
             }
 
-            // Scoped to this call and unwound afterwards, rather than mutating
-            // the session for the rest of the request.
-            $books = $this->bookService->runAs($userId, fn () => $this->bookService->getBooks());
+            // Straight from the metadata table, bounded in SQL.
+            //
+            // This used to call BookService::getBooks(), which scans the library
+            // and extracts metadata from every file before returning. Only the
+            // file ids were ever used. On a real library that meant parsing every
+            // PDF on every sync carrying an unknown hash, and smalot/pdfparser
+            // exhausted the 512 MB memory limit outright -- one request, one dead
+            // PHP worker, HTTP 500, repeatable by anyone with sync credentials.
+            //
+            // Hashing needs the file node and nothing else, so nothing here reads
+            // file contents beyond the few kilobytes the hash samples.
+            $qb = $this->db->getQueryBuilder();
+            $result = $qb->select('id', 'file_id')
+                ->from('koreader_metadata')
+                ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+                ->orderBy('updated_at', 'DESC')
+                ->setMaxResults(self::AUTO_INDEX_MAX_FILES)
+                ->executeQuery();
+            $candidates = $result->fetchAll();
+            $result->closeCursor();
 
-            // Bounded. Every iteration opens a file, so an unbounded loop here let
-            // one PUT with a random hash cost work proportional to the whole
-            // library -- repeatable, and cheap for the caller.
-            if (count($books) > self::AUTO_INDEX_MAX_FILES) {
-                $this->logger->debug('Auto-index stopping early: library larger than the per-request bound', [
-                    'app' => 'koreader_companion',
-                    'books' => count($books),
-                    'bound' => self::AUTO_INDEX_MAX_FILES,
-                ]);
-                $books = array_slice($books, 0, self::AUTO_INDEX_MAX_FILES);
-            }
+            $userFolder = $this->rootFolder->getUserFolder($userId);
 
-            // Check each book's hashes
-            foreach ($books as $book) {
+            foreach ($candidates as $candidate) {
                 try {
-                    // Get the file node
-                    $userFolder = $this->rootFolder->getUserFolder($userId);
-                    $files = $userFolder->getById($book['id']);
-                    
+                    $files = $userFolder->getById((int)$candidate['file_id']);
+
                     if (empty($files)) {
                         continue;
                     }
-                    
+
                     $file = $files[0];
                     
                     // Generate both types of hashes
@@ -475,21 +478,15 @@ class KoreaderController extends Controller {
                             'hash_type' => $hashType
                         ]);
 
-                        // Check if metadata record exists
-                        $metadataId = $this->getOrCreateMetadataRecord($book, $userId);
-                        if (!$metadataId) {
-                            continue;
-                        }
+                        // The row is what we selected, so no lookup-or-create needed.
+                        $this->createHashMapping($userId, $documentHash, $hashType, (int)$candidate['id']);
 
-                        // Create hash mapping
-                        $this->createHashMapping($userId, $documentHash, $hashType, $metadataId);
-                        
                         return true;
                     }
                     
                 } catch (\Exception $e) {
                     $this->logger->debug('Error processing book during auto-index', [
-                        'book_id' => $book['id'],
+                        'book_id' => $candidate['file_id'],
                         'error' => $e->getMessage()
                     ]);
                     continue;
@@ -499,7 +496,7 @@ class KoreaderController extends Controller {
             $this->logger->debug('Auto-index completed: no matching document found', [
                 'hash' => $documentHash,
                 'user' => $userId,
-                'books_checked' => count($books)
+                'books_checked' => count($candidates)
             ]);
 
             return false;
