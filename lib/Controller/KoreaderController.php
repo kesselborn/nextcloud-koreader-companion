@@ -12,7 +12,6 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\IDBConnection;
-use OCP\IUserSession;
 use OCP\IUserManager;
 use OCP\Config\IUserConfig;
 use OCP\Files\IRootFolder;
@@ -45,7 +44,6 @@ class KoreaderController extends Controller {
     private const MAX_PROGRESS_ROWS_PER_USER = 5000;
 
     private $db;
-    private $userSession;
     private $userManager;
     private $config;
     private $hashGenerator;
@@ -57,7 +55,6 @@ class KoreaderController extends Controller {
         $AppName, 
         IRequest $request, 
         IDBConnection $db, 
-        IUserSession $userSession, 
         IUserManager $userManager, 
         IUserConfig $config,
         DocumentHashGenerator $hashGenerator,
@@ -68,7 +65,6 @@ class KoreaderController extends Controller {
     ) {
         parent::__construct($AppName, $request);
         $this->db = $db;
-        $this->userSession = $userSession;
         $this->userManager = $userManager;
         $this->config = $config;
         $this->hashGenerator = $hashGenerator;
@@ -252,9 +248,13 @@ class KoreaderController extends Controller {
             return false;
         }
 
-        // Set authenticated user in session
-        $this->userSession->setUser($user);
-
+        // Deliberately does NOT call IUserSession::setUser(). These are
+        // #[PublicPage] routes with their own credential check, and installing a
+        // session user chosen by a request header leaves it installed for the
+        // rest of the request -- every later line then runs as that user whether
+        // it meant to or not. Everything here already passes the user id
+        // explicitly; the one call that needed a user context now uses
+        // BookService::runAs().
         return true;
     }
     
@@ -408,10 +408,9 @@ class KoreaderController extends Controller {
                 return false;
             }
 
-            $this->userSession->setUser($user);
-
-            // Get all books for this user
-            $books = $this->bookService->getBooks();
+            // Scoped to this call and unwound afterwards, rather than mutating
+            // the session for the rest of the request.
+            $books = $this->bookService->runAs($userId, fn () => $this->bookService->getBooks());
 
             // Bounded. Every iteration opens a file, so an unbounded loop here let
             // one PUT with a random hash cost work proportional to the whole

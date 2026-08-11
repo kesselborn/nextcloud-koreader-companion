@@ -58,6 +58,52 @@ class BookService {
 
 
     /**
+     * Set while a caller is acting for a user it authenticated itself.
+     *
+     * The KOReader sync API is a #[PublicPage] with its own credential check, so
+     * there is no session to read. It used to manufacture one with
+     * IUserSession::setUser(), which installs a session user chosen by a request
+     * header and leaves it installed for the rest of the request -- every later
+     * line then runs as that user, whether or not it meant to.
+     *
+     * This is the narrow version of the same thing: an explicit acting user,
+     * scoped to one call and always unwound.
+     */
+    private ?string $actingUserId = null;
+
+    /**
+     * Run $callback with $userId as the acting user.
+     *
+     * @template T
+     * @param callable():T $callback
+     * @return T
+     */
+    public function runAs(string $userId, callable $callback) {
+        $previous = $this->actingUserId;
+        $this->actingUserId = $userId;
+
+        try {
+            return $callback();
+        } finally {
+            // finally, so an exception cannot leave the override in place for
+            // whatever runs next in this request.
+            $this->actingUserId = $previous;
+        }
+    }
+
+    /**
+     * The user this call is for: the explicit acting user if one is set,
+     * otherwise the session user.
+     */
+    private function currentUserId(): ?string {
+        if ($this->actingUserId !== null) {
+            return $this->actingUserId;
+        }
+
+        return $this->userSession->getUser()?->getUID();
+    }
+
+    /**
      * Get paginated books from database with optional sorting
      */
     public function getBooks($page = null, $perPage = null, $sort = 'title', $skipMetadataUpdate = false) {
@@ -67,13 +113,13 @@ class BookService {
         }
         
         // Otherwise, maintain backward compatibility with file-system scanning
-        $user = $this->userSession->getUser();
-        if (!$user) {
+        $userId = $this->currentUserId();
+        if ($userId === null) {
             return [];
         }
 
-        $folderName = $this->config->getValueString($user->getUID(), 'koreader_companion', 'folder', 'eBooks');
-        $userFolder = $this->rootFolder->getUserFolder($user->getUID());
+        $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
+        $userFolder = $this->rootFolder->getUserFolder($userId);
         
         try {
             $booksFolder = $userFolder->get($folderName);
@@ -101,12 +147,11 @@ class BookService {
      * Get paginated books from database and file system
      */
     private function getPaginatedBooks($page = 1, $perPage = 20, $sort = 'title', $skipMetadataUpdate = false) {
-        $user = $this->userSession->getUser();
-        if (!$user) {
+        $userId = $this->currentUserId();
+        if ($userId === null) {
             return [];
         }
 
-        $userId = $user->getUID();
         $offset = ($page - 1) * $perPage;
 
         // First, ensure metadata is up to date by scanning for new files (unless skipped)
@@ -166,12 +211,11 @@ class BookService {
      * Get total count of books for pagination
      */
     public function getTotalBookCount($skipMetadataUpdate = false) {
-        $user = $this->userSession->getUser();
-        if (!$user) {
+        $userId = $this->currentUserId();
+        if ($userId === null) {
             return 0;
         }
 
-        $userId = $user->getUID();
 
         // Ensure metadata is up to date first (unless skipped)
         if (!$skipMetadataUpdate) {
