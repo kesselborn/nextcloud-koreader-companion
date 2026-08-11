@@ -63,7 +63,7 @@ class FileCreationListener implements IEventListener {
         }
 
         $extension = strtolower(pathinfo($node->getName(), PATHINFO_EXTENSION));
-        return in_array($extension, ['epub', 'pdf', 'cbr', 'mobi']);
+        return in_array($extension, BookService::SUPPORTED_EXTENSIONS, true);
     }
 
     private function extractUserIdFromPath(string $path): ?string {

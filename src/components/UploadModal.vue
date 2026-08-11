@@ -75,9 +75,8 @@ import Upload from 'vue-material-design-icons/Upload.vue'
 
 import { extractMetadata, uploadBook } from '../api.js'
 
-// Matches the extensions the backend listener indexes. cbz is absent there too;
-// see tasks.md 3.8.
-const EXTENSIONS = ['epub', 'pdf', 'cbr', 'mobi']
+// Mirrors BookService::SUPPORTED_EXTENSIONS.
+const EXTENSIONS = ['epub', 'pdf', 'cbr', 'cbz', 'mobi']
 
 export default {
 	name: 'UploadModal',

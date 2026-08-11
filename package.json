@@ -5,6 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "clean": "node -e \"fs.rmSync('js',{recursive:true,force:true});fs.rmSync('css',{recursive:true,force:true})\"",
+    "prebuild": "npm run clean",
     "build": "vite build --mode production",
     "dev": "vite build --mode development",
     "watch": "vite build --mode development --watch",

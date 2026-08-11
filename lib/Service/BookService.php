@@ -14,6 +14,19 @@ use Psr\Log\LoggerInterface;
 
 class BookService {
 
+    /**
+     * Extensions the library indexes.
+     *
+     * cbz was missing even though it is the more common comic container and the
+     * only one PHP can read unaided -- CBR is RAR and needs ext-rar or an unrar
+     * binary. Keep this list as the single source of truth; it used to be
+     * duplicated in four places, and the listeners had their own copies.
+     */
+    public const SUPPORTED_EXTENSIONS = ['epub', 'pdf', 'cbr', 'cbz', 'mobi'];
+
+    /** Comic archives, handled by the same metadata path. */
+    public const COMIC_EXTENSIONS = ['cbr', 'cbz'];
+
     private $rootFolder;
     private $config;
     private $userSession;
@@ -254,7 +267,7 @@ class BookService {
                 $this->syncFolderToDatabase($node, $userId, $existingMetadata);
             } else {
                 $extension = strtolower(pathinfo($node->getName(), PATHINFO_EXTENSION));
-                if (in_array($extension, ['epub', 'pdf', 'cbr', 'mobi'])) {
+                if (in_array($extension, self::SUPPORTED_EXTENSIONS, true)) {
                     $this->ensureFileInDatabase($node, $userId, $existingMetadata);
                 }
             }
@@ -324,7 +337,7 @@ class BookService {
                     'publication_date' => $qb->createNamedParameter($metadata['publication_date'] ?: null),
                     'language' => $qb->createNamedParameter($metadata['language']),
                     'series' => $qb->createNamedParameter($metadata['series']),
-                    'series_index' => $qb->createNamedParameter($metadata['issue'] ? floatval($metadata['issue']) : null),
+                    'series_index' => $qb->createNamedParameter($this->resolveSeriesIndex($metadata)),
                     'subject' => $qb->createNamedParameter($metadata['subject']),
                     'tags' => $qb->createNamedParameter($metadata['tags']),
                     'file_format' => $qb->createNamedParameter($metadata['format']),
@@ -365,7 +378,7 @@ class BookService {
                 ->set('publication_date', $qb->createNamedParameter($metadata['publication_date'] ?: null))
                 ->set('language', $qb->createNamedParameter($metadata['language']))
                 ->set('series', $qb->createNamedParameter($metadata['series']))
-                ->set('series_index', $qb->createNamedParameter($metadata['issue'] ? floatval($metadata['issue']) : null))
+                ->set('series_index', $qb->createNamedParameter($this->resolveSeriesIndex($metadata)))
                 ->set('subject', $qb->createNamedParameter($metadata['subject']))
                 ->set('tags', $qb->createNamedParameter($metadata['tags']))
                 ->set('file_format', $qb->createNamedParameter($metadata['format']))
@@ -444,7 +457,7 @@ class BookService {
                 $this->scanFolder($node, $books);
             } else {
                 $extension = strtolower(pathinfo($node->getName(), PATHINFO_EXTENSION));
-                if (in_array($extension, ['epub', 'pdf', 'cbr', 'mobi'])) {
+                if (in_array($extension, self::SUPPORTED_EXTENSIONS, true)) {
                     $books[] = $this->extractMetadata($node);
                 }
             }
@@ -493,16 +506,12 @@ class BookService {
                 $this->extractEpubMetadata($file, $metadata);
             } elseif ($extension === 'pdf') {
                 $this->extractPdfMetadata($file, $metadata);
-            } elseif ($extension === 'cbr') {
-                // Only process CBR if Archive class is available
-                if (class_exists('Kiwilan\Archive\Archive')) {
-                    $this->extractCbrMetadata($file, $metadata);
-                } else {
-                    // Fallback: basic filename metadata for CBR
-                    $filename = pathinfo($file->getName(), PATHINFO_FILENAME);
-                    $metadata['title'] = $filename;
-                    $metadata['format'] = 'cbr';
-                }
+            } elseif (in_array($extension, self::COMIC_EXTENSIONS, true)) {
+                // No class_exists guard: the filename parsing below needs no
+                // archive reader at all, and ComicInfo.xml is read with
+                // ZipArchive for cbz. Only cbr needs the optional dependency,
+                // and that path degrades on its own.
+                $this->extractComicMetadata($file, $metadata, $extension);
             } elseif ($extension === 'mobi') {
                 $this->extractMobiMetadata($file, $metadata);
             }
@@ -542,14 +551,8 @@ class BookService {
                 $this->extractEpubMetadata($file, $metadata);
             } elseif ($extension === 'pdf') {
                 $this->extractPdfMetadata($file, $metadata);
-            } elseif ($extension === 'cbr') {
-                if (class_exists('Kiwilan\Archive\Archive')) {
-                    $this->extractCbrMetadata($file, $metadata);
-                } else {
-                    // Fallback: basic filename metadata for CBR
-                    $filename = pathinfo($file->getName(), PATHINFO_FILENAME);
-                    $metadata['title'] = $filename;
-                }
+            } elseif (in_array($extension, self::COMIC_EXTENSIONS, true)) {
+                $this->extractComicMetadata($file, $metadata, $extension);
             } elseif ($extension === 'mobi') {
                 $this->extractMobiMetadata($file, $metadata);
             }
@@ -726,6 +729,24 @@ class BookService {
         }
     }
 
+    /**
+     * Value for the series_index column.
+     *
+     * This column was fed from $metadata['issue'] only, so a real series index
+     * was discarded: comics happened to work because they set 'issue', but an
+     * EPUB carrying calibre:series_index had it silently dropped. Prefer the
+     * explicit index and keep the issue number as the comic fallback.
+     */
+    private function resolveSeriesIndex(array $metadata): ?float {
+        if (isset($metadata['series_index']) && $metadata['series_index'] !== '' && $metadata['series_index'] !== null) {
+            return (float)$metadata['series_index'];
+        }
+        if (!empty($metadata['issue']) && is_numeric($metadata['issue'])) {
+            return (float)$metadata['issue'];
+        }
+        return null;
+    }
+
     private function extractEpubMetadata(Node $file, &$metadata) {
         try {
             // Read the EPUB file content
@@ -740,28 +761,21 @@ class BookService {
                 $epubMetadata = $this->parseEpubOPF($zip);
                 $zip->close();
                 
-                // Merge extracted metadata
+                // Copy across whatever the OPF yielded.
+                //
+                // This used to be a hand-maintained list of if(!empty()) blocks,
+                // which had drifted from what parseEpubOPF() actually returns:
+                // 'series' and 'series_index' were never copied, and the date
+                // branch looked for a 'date' key that parseEpubOPF has never
+                // produced -- it returns 'publication_date' already parsed. So
+                // EPUB series and publication dates both silently vanished here,
+                // which is why the Year column was always empty for EPUBs.
+                // Iterating keeps the two ends from drifting again.
                 if ($epubMetadata) {
-                    if (!empty($epubMetadata['title'])) {
-                        $metadata['title'] = $epubMetadata['title'];
-                    }
-                    if (!empty($epubMetadata['author'])) {
-                        $metadata['author'] = $epubMetadata['author'];
-                    }
-                    if (!empty($epubMetadata['description'])) {
-                        $metadata['description'] = $epubMetadata['description'];
-                    }
-                    if (!empty($epubMetadata['language'])) {
-                        $metadata['language'] = $epubMetadata['language'];
-                    }
-                    if (!empty($epubMetadata['publisher'])) {
-                        $metadata['publisher'] = $epubMetadata['publisher'];
-                    }
-                    if (!empty($epubMetadata['subject'])) {
-                        $metadata['subject'] = $epubMetadata['subject'];
-                    }
-                    if (!empty($epubMetadata['date'])) {
-                        $metadata['publication_date'] = $this->parsePublicationDate($epubMetadata['date']);
+                    foreach ($epubMetadata as $key => $value) {
+                        if ($value !== null && $value !== '') {
+                            $metadata[$key] = $value;
+                        }
                     }
                 }
             }
@@ -798,13 +812,13 @@ class BookService {
         }
     }
 
-    private function extractCbrMetadata(Node $file, &$metadata) {
+    private function extractComicMetadata(Node $file, &$metadata, string $extension = 'cbr') {
         try {
             $filename = pathinfo($file->getName(), PATHINFO_FILENAME);
-            
+
             // Set basic metadata from filename
             $metadata['title'] = $filename;
-            $metadata['format'] = 'cbr';
+            $metadata['format'] = $extension;
             
             // Try to parse comic book information from filename
             // Common patterns: "Series Name #001 (Year)", "Series Name 001", etc.
@@ -819,47 +833,85 @@ class BookService {
                 $metadata['issue'] = $matches[2];
             }
             
-            // Extract ComicInfo.xml metadata if present
+            // ComicInfo.xml, when the archive carries one, overrides the guesses above.
             $this->extractComicInfoMetadata($file, $metadata);
             
         } catch (\Exception $e) {
             // If extraction fails, keep defaults
-            $this->logger->error('CBR metadata extraction failed', ['exception' => $e]);
+            $this->logger->error('Comic metadata extraction failed', ['exception' => $e]);
         }
     }
 
+    /**
+     * Read ComicInfo.xml out of a comic archive, if it has one.
+     *
+     * This never worked before: it called Archive::make(), which returns an
+     * ArchiveZipCreate *writer*, then getName()/getContent() on the items --
+     * neither method exists on ArchiveItem. CBZ is now read with ZipArchive
+     * directly, which needs no dependency at all; CBR still needs
+     * kiwilan/php-archive plus an unrar binary and degrades quietly without them.
+     */
     private function extractComicInfoMetadata(Node $file, &$metadata) {
+        $localPath = null;
         try {
-            $content = $file->getContent();
-            $tempFile = tempnam(sys_get_temp_dir(), 'cbr_info_');
-            file_put_contents($tempFile, $content);
-            
-            $archive = \Kiwilan\Archive\Archive::make($tempFile);
-            if (!$archive) {
-                if (file_exists($tempFile)) { unlink($tempFile); }
+            $localPath = tempnam(sys_get_temp_dir(), 'comicinfo_');
+            if ($localPath === false) {
                 return;
             }
-            
-            // Look for ComicInfo.xml in the archive
-            $files = $archive->getFiles();
-            $comicInfoXml = null;
-            
-            foreach ($files as $archiveFile) {
-                if (strtolower($archiveFile->getName()) === 'comicinfo.xml') {
-                    $comicInfoXml = $archiveFile->getContent();
-                    break;
+            file_put_contents($localPath, $file->getContent());
+
+            $xml = $this->readComicInfoFromZip($localPath)
+                ?? $this->readComicInfoFromRar($localPath);
+
+            if ($xml !== null && $xml !== '') {
+                $this->parseComicInfoXml($xml, $metadata);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('ComicInfo.xml extraction failed', [
+                'file_path' => $file->getPath(),
+                'exception' => $e,
+            ]);
+        } finally {
+            if ($localPath !== null && file_exists($localPath)) {
+                unlink($localPath);
+            }
+        }
+    }
+
+    /** Handles cbz, and mislabelled cbr files that are really zips. */
+    private function readComicInfoFromZip(string $localPath): ?string {
+        $zip = new \ZipArchive();
+        if ($zip->open($localPath) !== true) {
+            return null;
+        }
+        try {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if ($name !== false && strtolower(basename($name)) === 'comicinfo.xml') {
+                    $content = $zip->getFromIndex($i);
+                    return $content === false ? null : $content;
                 }
             }
-            
-            if (file_exists($tempFile)) { unlink($tempFile); }
-            
-            if ($comicInfoXml) {
-                $this->parseComicInfoXml($comicInfoXml, $metadata);
-            }
-            
-        } catch (\Throwable $e) {
-            $this->logger->error('ComicInfo.xml extraction failed', ['exception' => $e]);
+            return null;
+        } finally {
+            $zip->close();
         }
+    }
+
+    private function readComicInfoFromRar(string $localPath): ?string {
+        if (!class_exists(\Kiwilan\Archive\Archive::class)) {
+            return null;
+        }
+
+        $archive = \Kiwilan\Archive\Archive::read($localPath);
+        foreach ($archive->getFiles() as $item) {
+            $path = $item->getPath() ?? $item->getFilename() ?? '';
+            if (strtolower(basename($path)) === 'comicinfo.xml') {
+                $content = $archive->getContent($item);
+                return ($content === null || $content === '') ? null : $content;
+            }
+        }
+        return null;
     }
     
     private function parseComicInfoXml($xmlContent, &$metadata) {
@@ -1297,6 +1349,36 @@ class BookService {
             $identifiers = $opf->xpath('//dc:identifier[@opf:scheme="ISBN"] | //dc:identifier');
             if (!empty($identifiers)) {
                 $metadata['identifier'] = (string)$identifiers[0];
+            }
+
+            // Series. EPUB has no standard element for it, so both conventions in
+            // the wild are read: the calibre:series meta that most tools write,
+            // and the EPUB 3 belongs-to-collection refines pair. Without this the
+            // series column and the whole OPDS series facet stayed empty for
+            // every EPUB -- only comics ever set a series.
+            $seriesMeta = $opf->xpath('//*[local-name()="meta"][@name="calibre:series"]/@content');
+            if (!empty($seriesMeta)) {
+                $metadata['series'] = trim((string)$seriesMeta[0]);
+            }
+            $seriesIndex = $opf->xpath('//*[local-name()="meta"][@name="calibre:series_index"]/@content');
+            if (!empty($seriesIndex)) {
+                $metadata['series_index'] = (float)(string)$seriesIndex[0];
+            }
+
+            if (empty($metadata['series'])) {
+                $collection = $opf->xpath('//*[local-name()="meta"][@property="belongs-to-collection"]');
+                if (!empty($collection)) {
+                    $metadata['series'] = trim((string)$collection[0]);
+                    $id = (string)$collection[0]['id'];
+                    if ($id !== '') {
+                        $position = $opf->xpath(
+                            '//*[local-name()="meta"][@refines="#' . $id . '"][@property="group-position"]'
+                        );
+                        if (!empty($position)) {
+                            $metadata['series_index'] = (float)(string)$position[0];
+                        }
+                    }
+                }
             }
             
             return $metadata;
