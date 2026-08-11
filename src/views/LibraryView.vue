@@ -19,7 +19,6 @@
 				:clearable="false"
 				label="label"
 				:reduce="option => option.value"
-				:input-label="t('koreader_companion', 'Sort by')"
 				:aria-label-combobox="t('koreader_companion', 'Sort order')"
 				class="library__sort"
 				@update:model-value="reload" />
@@ -144,10 +143,10 @@ export default {
 		},
 		sortOptions() {
 			return [
-				{ value: 'title', label: t('koreader_companion', 'Title') },
-				{ value: 'author', label: t('koreader_companion', 'Author') },
-				{ value: 'recent', label: t('koreader_companion', 'Recently added') },
-				{ value: 'publication_date', label: t('koreader_companion', 'Publication date') },
+				{ value: 'title', label: t('koreader_companion', 'Sort by title') },
+				{ value: 'author', label: t('koreader_companion', 'Sort by author') },
+				{ value: 'recent', label: t('koreader_companion', 'Sort by date added') },
+				{ value: 'publication_date', label: t('koreader_companion', 'Sort by publication date') },
 			]
 		},
 	},
@@ -309,11 +308,7 @@ export default {
 	&__toolbar {
 		display: flex;
 		flex-wrap: wrap;
-		// flex-end, not center: the sort control carries a label above it and the
-		// search field does not, so centring left the two input boxes sitting at
-		// different heights. Aligning on the bottom edge lines the boxes up
-		// regardless of what sits above them.
-		align-items: flex-end;
+		align-items: center;
 		gap: calc(var(--default-grid-baseline) * 3);
 		margin-block-end: calc(var(--default-grid-baseline) * 4);
 	}
@@ -324,8 +319,19 @@ export default {
 	}
 
 	&__sort {
-		flex: 0 0 200px;
-		min-width: 180px;
+		flex: 0 0 220px;
+		min-width: 200px;
+
+		// NcTextField and NcSelect do not agree on their own height, which showed
+		// as one box being visibly taller than the other. Pin both to Nextcloud's
+		// standard control height so they match.
+		:deep(.vs__dropdown-toggle) {
+			min-height: var(--default-clickable-area, 44px);
+		}
+	}
+
+	&__search :deep(input) {
+		height: var(--default-clickable-area, 44px);
 	}
 
 	&__pending-note {
@@ -346,9 +352,6 @@ export default {
 	}
 
 	&__count {
-		// The row is bottom-aligned for the inputs' sake; this is plain text, so
-		// centre it against the boxes rather than dropping it to their baseline.
-		align-self: center;
 		color: var(--color-text-maxcontrast);
 		font-size: .9em;
 		margin-inline-start: auto;
