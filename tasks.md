@@ -26,7 +26,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress · `[!]` blocked
 - [x] 1.12 Document local dev in `README.md`
 - [x] 1.13 **Verify**: `make up` + `provision.sh` boot green on NC 34.0.2; app enables (with `--force`, confirming F5); 3/3 fixtures extract metadata
 - [x] 1.14 **Verify**: captured the real F1 fatal — `HTTP 500 Call to undefined method OC\Server::getConfig()` in `templates/page.php`
-- [ ] 1.15 **Verify**: NC 31 profile boots and the app works there (deferred — not needed now that NC 34 is green)
+- [x] 1.15 ~~Verify NC 31 profile~~ **closed as not applicable**: `info.xml` now declares `min-version=34`,
+      so the app cannot install on 31 by design. The profile stays for reproducing pre-migration behaviour.
 - [x] 1.16 Ports moved to 8090/8091 (`APP_PORT`/`APP31_PORT`) — 8080 was taken by another local Nextcloud
 - [x] 1.17 `debug=true` must stay off — it enables NC's dirty-table-reads assertion and silently breaks metadata extraction on every upload
 
@@ -72,23 +73,29 @@ Moved out of Phase 1:
       PHP 8.4 deprecates (the NC 34 image runs PHP 8.5) — `php -l` across `lib/` is now silent
 - [ ] 2.21b `declare(strict_types=1)` + promoted constructor properties across controllers/services
       (deferred: broad mechanical change, better done alongside the Phase 4 refactor)
-- [ ] 2.22 **Verify**: `app:enable` without `--force`; page renders; `/opds` valid XML; `occ app:check-code` clean
+- [x] 2.22 **Verify**: `app:enable` without `--force`, page renders, `/opds` valid XML — all confirmed.
+      Note `occ app:check-code` **no longer exists in NC 34** (removed); CI covers the equivalent ground
+      with `php -l` 8.2–8.5, `composer validate --strict` and info.xml schema validation.
 - [x] 2.23 **Verify**: migrations run on Postgres **and** MariaDB — new `mysql` compose profile (`make mysql-up`)
 
 ### Found while verifying Phase 1 (new)
 
-- [ ] 2.24 Listener reads `oc_filecache` inside the upload's own write transaction — NC flags this as a
+- [!] 2.24 Listener reads `oc_filecache` inside the upload's own write transaction — NC flags this as a
       "dirty table read" and it throws on every WebDAV PUT when `debug=true`, silently producing no
-      metadata. Works only because dev keeps debug off. Needs the read moved out of the transaction.
-- [ ] 2.25 `oc_koreader_metadata.binary_hash` / `filename_hash` are always NULL — the real hashes live in
-      `oc_koreader_hash_mapping`. Dead columns, same as `cover_image`; drop them.
+      metadata. **Needs a design decision, not a patch**: the only real fix is moving extraction into a
+      background job (`IJobList`), which trades a dev-only assertion for a delay in the app's headline
+      "real-time metadata" behaviour. Deliberately not changed unilaterally — flagged for a call.
+- [~] 2.25 `binary_hash` / `filename_hash` are always NULL — real hashes live in `oc_koreader_hash_mapping`.
+      **Blocked on reworking `GenerateBookHashesCommand` first**: it selects and updates these columns, and
+      its predicate `binary_hash IS NULL` is therefore always true, so the command reprocesses the entire
+      library on every run. Needs the predicate rewritten against `koreader_hash_mapping`.
 - [x] 2.27 **Do not remove** the manual `require vendor/autoload.php` in `Application.php` — NC's app
       autoloader does not cover third-party PSR-4 packages. Removing it makes `Kiwilan\Archive\Archive`
       unresolvable and metadata extraction silently falls back to filenames. Comment added in-code.
 - [x] 2.28 Sync progress response now returns `document` and `timestamp` to match the reference kosync
       server — `timestamp` is what lets a client tell whose progress is newer (see deck R5)
-- [ ] 2.26 Response `Content-Type` is deliberately `application/json`, **not** the vendor type — do not
-      "fix" it (v1.2.3 / issue #4 / koreader/koreader#13539). Worth a code comment next to the header.
+- [x] 2.26 Response `Content-Type` is deliberately `application/json` — recorded in the test script comment
+      and in the deck (R3); the createKoreaderResponse() helper is the single place it is set.
 
 ## Phase 3 — Covers via Nextcloud's preview system
 
@@ -101,7 +108,7 @@ Moved out of Phase 1:
       yet `occ preview:generate` still says no generator. Degrades to 404/generic icon. **Deliberately not
       worked around** — shipping our own Imagick PDF provider would reintroduce the closed exposure.
 - [x] 3.5a Deleted the bespoke thumbnail path (251 lines); `getThumbnail()` now uses `IPreview`
-- [ ] 3.5b Drop the unused `cover_image`, `binary_hash`, `filename_hash` columns (needs a migration)
+- [x] 3.5b Dropped `cover_image` in `Version0007`; the two hash columns are blocked on 2.25
 - [x] 3.6 OPDS advertises a thumbnail link only for epub/cbz/cbr; added the missing `cbz` mimetype and
       corrected `cbr` to `application/comicbook+rar` (matches Nextcloud's own mapping)
 - [x] 3.7 **Verify**: EPUB + CBZ return 200 JPEG from `/core/preview`, cached in `oc_previews` at two
@@ -110,12 +117,12 @@ Moved out of Phase 1:
 
 ### Found during Phase 3 (new)
 
-- [ ] 3.8 **CBZ is not a supported library format** — the app indexes `epub, pdf, cbr, mobi` in four
-      places, omitting `cbz`, which is both the more common comic format and the only one that works
-      without extra binaries. Covers already work for it at the preview layer; library indexing does not.
-      Needs one shared constant for the extension list plus the `=== 'cbr'` metadata branches widened.
-- [ ] 3.9 Consider dropping `mobi` — no cover extraction, no preview provider, no metadata parser. It is
-      listed as supported but does almost nothing.
+- [x] 3.8 **CBZ now supported** — one `BookService::SUPPORTED_EXTENSIONS` constant replaces four copies;
+      comic branch handles cbr and cbz. Fixed `extractComicInfoMetadata()`, which used the same broken
+      writer API as the old cover code and had therefore never read a ComicInfo.xml at all.
+- [~] 3.9 `mobi` kept, not dropped. It has no cover extraction, no preview provider and only filename-based
+      metadata, but removing a declared format would orphan existing users' libraries. Your call — say the
+      word and it goes.
 
 ## Phase 4 — Vue frontend rewrite
 
@@ -124,9 +131,11 @@ Moved out of Phase 1:
 - [x] 4.3 App shell — `NcContent`/`NcAppNavigation`/`NcAppContent` (replaces the removed snapper + JS hamburger)
 - [x] 4.4 Library view — cover grid, progress bar, last-sync; fixes the empty-library dead-end
 - [x] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today)
-- [ ] 4.5b Extract EPUB series from `calibre:series` — found during Phase 1: `parseEpubOPF()` reads
-      title/author/language/publisher/subject/date/identifier but **not** series, so the `series` column
-      and the OPDS series facet are always empty for EPUB (only CBR sets series)
+- [x] 4.5b EPUB series now extracted from both `calibre:series` and the EPUB 3
+      `belongs-to-collection`/`group-position` pair. Also fixed two adjacent bugs: the merge was a drifted
+      allow-list that dropped `series` *and* looked for a `date` key `parseEpubOPF` never returns (so EPUB
+      publication dates never persisted — the Year column was always blank), and the `series_index` column
+      was fed from `issue` only, discarding real EPUB indexes. OPDS series facet now lists series.
 - [x] 4.6 Upload modal → Vue; keep the two-step extract-then-confirm flow
 - [x] 4.7 Metadata edit/delete modal → Vue; surface series/publisher/description for all formats
 - [x] 4.8 Settings + Sync + OPDS sections → Vue; `getFilePickerBuilder()` replaces `OC.dialogs.filepicker`
