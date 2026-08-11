@@ -139,7 +139,10 @@ Moved out of Phase 1:
 - [x] 4.2 `PageController::index()` → `IInitialState` + `Util::addScript/addStyle`
 - [x] 4.3 App shell — `NcContent`/`NcAppNavigation`/`NcAppContent` (replaces the removed snapper + JS hamburger)
 - [x] 4.4 Library view — cover grid, progress bar, last-sync; fixes the empty-library dead-end
-- [x] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today)
+- [x] 4.5 Wire the existing backend `sort` param to the UI (sorting is DOM-only today). **Was only half
+      done — corrected in Phase 10:** the frontend sent `sort`, but `PageController::index()` read it
+      nowhere and passed a hardcoded `'title'`, while the search path hardcoded its own `ORDER BY`. The
+      control changed the dropdown and nothing else
 - [x] 4.5b EPUB series now extracted from both `calibre:series` and the EPUB 3
       `belongs-to-collection`/`group-position` pair. Also fixed two adjacent bugs: the merge was a drifted
       allow-list that dropped `series` *and* looked for a `date` key `parseEpubOPF` never returns (so EPUB
@@ -442,3 +445,17 @@ processed" was.
 - [x] V8 Cron sidecar proved end-to-end: a WebDAV upload landed as `pending` titled after its filename
       and was `Der Prozess` / `Franz Kafka` within 10s, unattended. The throttle from `8.2b` does not
       hide new files — the listener writes the row, so an upload still appears in the feed immediately
+
+## Phase 10 — UI fixes (reported while testing)
+
+- [x] 10.1 **Sorting did not work.** `PageController::index()` never read the `sort` parameter the UI
+      had been sending since 4.5. Now threaded through both the list and the search, with the
+      allow-listed `switch` shared as `BookService::applySort()` so the two cannot drift apart again.
+      Verified: title, author and recent each return a different order
+- [x] 10.2 The sort control had no visible label — only an `aria-label` — so it read as an unexplained
+      second box beside the search field. Now labelled `Sort by` via NcSelect's `input-label`
+- [x] 10.3 Author names on cards are clickable, titled "Search for books of this author", and fill the
+      search box and run the search. A real `<button>` styled back down to look like text, so it is
+      keyboard-reachable and announced as an action. Uses the same query a user could type rather than a
+      dedicated author filter, so the box keeps reflecting what is on screen. Verified: clicking
+      `Arthur C. Clarke` returns 13 books, including a co-authored one
