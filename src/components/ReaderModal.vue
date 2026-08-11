@@ -75,8 +75,8 @@
 			     saving it silently could move where a Kobo resumes. -->
 			<NcDialog
 				v-if="askingToSave"
-				:name="t('koreader_companion', 'Save reading position?')"
-				:message="t('koreader_companion', 'Your devices will resume this book here.')"
+				:name="t('koreader_companion', 'Keep this as your place in the book?')"
+				:message="saveDialogMessage"
 				:buttons="saveDialogButtons"
 				@closing="close" />
 
@@ -92,9 +92,7 @@
 					class="reader__slider"
 					@change="seek">
 				<span class="reader__percent">
-					{{ locationsReady
-						? t('koreader_companion', '{percent}%', { percent })
-						: t('koreader_companion', 'Measuring…') }}
+					{{ positionLabel }}
 				</span>
 			</div>
 		</div>
@@ -149,7 +147,7 @@ export default {
 		},
 	},
 
-	emits: ['close'],
+	emits: ['close', 'saved'],
 
 	data() {
 		return {
@@ -170,19 +168,61 @@ export default {
 			saving: false,
 			askingToSave: false,
 			currentCfi: '',
+			page: 0,
+			pageTotal: 0,
+			// True when the numbers come from the book's own page-list (printed page
+			// numbers) rather than from epub.js's evenly-sized locations.
+			realPages: false,
 			fontSize: Number(localStorage.getItem(FONT_SIZE_KEY)) || 100,
 		}
 	},
 
 	computed: {
+		/**
+		 * Percentage always; page numbers once they are known.
+		 *
+		 * A book with a page-list gives real printed page numbers. Without one the
+		 * numbers come from epub.js's locations index, which is evenly sized rather
+		 * than typeset, so they are labelled the same but are only ever "a page's
+		 * worth of text".
+		 */
+		positionLabel() {
+			if (!this.locationsReady) {
+				return t('koreader_companion', 'Measuring…')
+			}
+			if (this.pageTotal > 0) {
+				return t('koreader_companion', 'Page {page} of {total} · {percent}%', {
+					page: this.page,
+					total: this.pageTotal,
+					percent: this.percent,
+				})
+			}
+			return t('koreader_companion', '{percent}%', { percent: this.percent })
+		},
+
+		/**
+		 * Says what will actually happen: this overwrites the position every other
+		 * device resumes from, which is not obvious from a bare "save?".
+		 */
+		saveDialogMessage() {
+			const here = t('koreader_companion', 'You stopped at {percent}%.', { percent: this.percent })
+
+			return this.openedFrom
+				? here + ' ' + t('koreader_companion',
+					'Saving replaces the position from {device}, and your other devices will continue from here.',
+					{ device: this.openedFrom })
+				: here + ' ' + t('koreader_companion',
+					'Your KOReader devices will continue from here.')
+		},
+
 		saveDialogButtons() {
 			return [
 				{
-					label: t('koreader_companion', 'Discard'),
+					label: t('koreader_companion', 'Leave it unchanged'),
 					callback: () => this.close(),
 				},
 				{
-					label: t('koreader_companion', 'Save'),
+					label: t('koreader_companion', 'Continue here on my devices'),
 					type: 'primary',
 					disabled: this.saving,
 					callback: () => this.saveAndClose(),
@@ -307,6 +347,9 @@ export default {
 					device: t('koreader_companion', 'Nextcloud Web'),
 				})
 				showSuccess(t('koreader_companion', 'Reading position saved'))
+				// The card still shows whatever progress it was rendered with, so
+				// tell the library to re-read it rather than leaving a stale number.
+				this.$emit('saved')
 			} catch (error) {
 				showError(t('koreader_companion', 'Could not save your reading position'))
 			} finally {
@@ -398,8 +441,37 @@ export default {
 			localStorage.setItem(positionKey(this.book.id), cfi)
 			if (this.locationsReady) {
 				this.percent = Math.round(this.epub.locations.percentageFromCfi(cfi) * 100)
+				this.updatePage(cfi)
 			}
 			this.chapter = this.epub.navigation?.get(location.start.href)?.label?.trim() || ''
+		},
+
+		/**
+		 * Page numbers, real ones if the book carries a page-list.
+		 */
+		updatePage(cfi) {
+			try {
+				const pageList = this.epub.pageList
+				if (pageList?.totalPages > 0) {
+					const page = pageList.pageFromCfi(cfi)
+					if (page > 0) {
+						this.realPages = true
+						this.page = page
+						this.pageTotal = pageList.lastPage
+						return
+					}
+				}
+
+				// No page-list: fall back to the locations index we already built for
+				// the percentage readout. Evenly sized chunks, not typeset pages.
+				const total = this.epub.locations.total
+				if (total > 0) {
+					this.page = this.epub.locations.locationFromCfi(cfi) + 1
+					this.pageTotal = total
+				}
+			} catch (error) {
+				// A missing page readout is not worth interrupting reading over.
+			}
 		},
 
 		onKey(event) {

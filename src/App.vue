@@ -36,6 +36,7 @@
 		<ReaderModal
 			v-if="reading"
 			:book="reading"
+			@saved="$refs.library?.refreshInPlace()"
 			@close="reading = null" />
 
 		<UploadModal
