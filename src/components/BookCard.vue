@@ -26,6 +26,16 @@
 			     kebab menu. Edit and Delete are the two things people look for. -->
 			<div v-if="!pending" class="book__actions">
 				<NcButton
+					v-if="readable"
+					:aria-label="t('koreader_companion', 'Read')"
+					type="tertiary-no-background"
+					class="book__action-btn"
+					@click="$emit('read')">
+					<template #icon>
+						<BookOpenPageVariant :size="18" />
+					</template>
+				</NcButton>
+				<NcButton
 					:aria-label="t('koreader_companion', 'Edit')"
 					type="tertiary-no-background"
 					class="book__action-btn"
@@ -66,6 +76,7 @@
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import BookOpenPageVariant from 'vue-material-design-icons/BookOpenPageVariant.vue'
 import Download from 'vue-material-design-icons/Download.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 
@@ -80,6 +91,7 @@ export default {
 	name: 'BookCard',
 
 	components: {
+		BookOpenPageVariant,
 		Download,
 		NcButton,
 		NcLoadingIcon,
@@ -93,7 +105,7 @@ export default {
 		},
 	},
 
-	emits: ['edit'],
+	emits: ['edit', 'read'],
 
 	data() {
 		return {
@@ -104,6 +116,11 @@ export default {
 	computed: {
 		pending() {
 			return this.book.indexing_state === 'pending'
+		},
+		readable() {
+			// The built-in reader is epub.js, so EPUB only. PDFs and comics keep
+			// their download button and open in whatever the browser prefers.
+			return (this.book.format || '').toLowerCase() === 'epub'
 		},
 		hasCover() {
 			// A pending book has no preview yet either -- the job has not run, so

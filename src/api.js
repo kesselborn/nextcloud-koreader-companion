@@ -15,12 +15,30 @@ export function coverUrl(fileId, width = 256, height = 384) {
 	})
 }
 
+/** Raw EPUB bytes for the reader; epub.js unpacks the archive client-side. */
+export async function fetchBookFile(id) {
+	const { data } = await axios.get(url(`/books/${id}/file`), { responseType: 'arraybuffer' })
+	return data
+}
+
 export async function fetchBooks({ page = 1, query = '', sort = 'title' } = {}) {
 	const { data } = await axios.get(url('/'), {
 		params: { page, q: query, sort },
 		headers: { Accept: 'application/json' },
 	})
 	return Array.isArray(data) ? data : []
+}
+
+/**
+ * Extract metadata now for books still marked pending.
+ *
+ * Nextcloud cannot be asked to run one specific background job, so this does the
+ * work in-request rather than triggering the queue. Bounded server-side; the
+ * response reports what is left so the caller can offer another round.
+ */
+export async function processPending() {
+	const { data } = await axios.post(url('/books/process-pending'))
+	return data
 }
 
 export async function getSettings() {

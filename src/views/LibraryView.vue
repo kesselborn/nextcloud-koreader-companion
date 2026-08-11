@@ -27,14 +27,33 @@
 				{{ n('koreader_companion', '%n book', '%n books', books.length) }}
 			</span>
 
+			<!-- Only rendered while something is actually pending: extraction
+			     normally happens on its own, and a permanent button would imply the
+			     library needs manual upkeep. -->
 			<NcNoteCard
 				v-if="pendingCount > 0"
 				type="info"
 				class="library__pending-note">
-				{{ n('koreader_companion',
-					'%n book is being processed. Its details will appear here shortly.',
-					'%n books are being processed. Their details will appear here shortly.',
-					pendingCount) }}
+				<div class="library__pending">
+					<span>
+						{{ n('koreader_companion',
+							'%n book is being processed. Its details will appear here shortly.',
+							'%n books are being processed. Their details will appear here shortly.',
+							pendingCount) }}
+					</span>
+					<NcButton
+						:disabled="extracting"
+						class="library__pending-action"
+						@click="extractNow">
+						<template #icon>
+							<NcLoadingIcon v-if="extracting" :size="20" />
+							<Refresh v-else :size="20" />
+						</template>
+						{{ extracting
+							? t('koreader_companion', 'Extracting…')
+							: t('koreader_companion', 'Extract metadata now') }}
+					</NcButton>
+				</div>
 			</NcNoteCard>
 		</div>
 
@@ -56,7 +75,8 @@
 				v-for="book in books"
 				:key="book.id"
 				:book="book"
-				@edit="$emit('edit', book)" />
+				@edit="$emit('edit', book)"
+				@read="$emit('read', book)" />
 		</ul>
 
 		<NcLoadingIcon v-if="loading" :size="32" class="library__loading" />
@@ -67,16 +87,18 @@
 </template>
 
 <script>
-import { showError } from '@nextcloud/dialogs'
+import { showError, showSuccess } from '@nextcloud/dialogs'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import BookOpenVariant from 'vue-material-design-icons/BookOpenVariantOutline.vue'
+import Refresh from 'vue-material-design-icons/Refresh.vue'
 
 import BookCard from '../components/BookCard.vue'
-import { fetchBooks } from '../api.js'
+import { fetchBooks, processPending } from '../api.js'
 
 const PER_PAGE = 50
 
@@ -86,14 +108,16 @@ export default {
 	components: {
 		BookCard,
 		BookOpenVariant,
+		NcButton,
 		NcEmptyContent,
 		NcLoadingIcon,
 		NcNoteCard,
 		NcSelect,
 		NcTextField,
+		Refresh,
 	},
 
-	emits: ['edit'],
+	emits: ['edit', 'read'],
 
 	data() {
 		return {
@@ -104,6 +128,7 @@ export default {
 			// sort parameter and instead re-sorted whatever rows were in the DOM.
 			sort: 'title',
 			loading: false,
+			extracting: false,
 			hasMore: true,
 			observer: null,
 			debounce: null,
@@ -181,6 +206,41 @@ export default {
 			}
 		},
 
+		/**
+		 * Do the extraction the background job would have done, now.
+		 *
+		 * The server works through a bounded batch, so a big backlog needs more
+		 * than one press -- hence reporting what is left rather than implying the
+		 * queue is drained.
+		 */
+		async extractNow() {
+			this.extracting = true
+			try {
+				const { processed, failed, remaining } = await processPending()
+				await this.refreshInPlace()
+
+				if (failed > 0) {
+					showError(n('koreader_companion',
+						'%n book could not be read',
+						'%n books could not be read',
+						failed))
+				}
+
+				if (remaining > 0) {
+					showSuccess(n('koreader_companion',
+						'%n book still waiting. Press again to continue.',
+						'%n books still waiting. Press again to continue.',
+						remaining))
+				} else if (processed > 0) {
+					showSuccess(t('koreader_companion', 'Metadata extracted'))
+				}
+			} catch (error) {
+				showError(t('koreader_companion', 'Could not extract metadata'))
+			} finally {
+				this.extracting = false
+			}
+		},
+
 		async reload() {
 			this.page = 1
 			this.hasMore = true
@@ -252,6 +312,18 @@ export default {
 	&__pending-note {
 		flex: 1 1 100%;
 		margin-block: 0;
+	}
+
+	&__pending {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: calc(var(--default-grid-baseline) * 3);
+	}
+
+	&__pending-action {
+		flex: 0 0 auto;
 	}
 
 	&__count {

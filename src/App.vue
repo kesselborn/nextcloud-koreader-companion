@@ -24,13 +24,19 @@
 			<LibraryView
 				v-if="section === 'library'"
 				ref="library"
-				@edit="editBook" />
+				@edit="editBook"
+				@read="reading = $event" />
 			<SettingsView v-else-if="section === 'settings'" />
 			<ConnectionView
 				v-else
 				:kind="section"
 				:info="connectionInfo" />
 		</NcAppContent>
+
+		<ReaderModal
+			v-if="reading"
+			:book="reading"
+			@close="reading = null" />
 
 		<UploadModal
 			v-if="uploadOpen"
@@ -62,6 +68,7 @@ import SyncIcon from 'vue-material-design-icons/SyncCircle.vue'
 import ConnectionView from './views/ConnectionView.vue'
 import LibraryView from './views/LibraryView.vue'
 import MetadataModal from './components/MetadataModal.vue'
+import ReaderModal from './components/ReaderModal.vue'
 import SettingsView from './views/SettingsView.vue'
 import UploadModal from './components/UploadModal.vue'
 
@@ -77,6 +84,7 @@ export default {
 		NcAppNavigationItem,
 		NcAppNavigationNew,
 		NcContent,
+		ReaderModal,
 		SettingsView,
 		UploadModal,
 	},
@@ -86,6 +94,7 @@ export default {
 			section: 'library',
 			uploadOpen: false,
 			editing: null,
+			reading: null,
 			connectionInfo: loadState('koreader_companion', 'connection', {}),
 		}
 	},

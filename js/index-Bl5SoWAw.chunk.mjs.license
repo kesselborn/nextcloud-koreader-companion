@@ -1,0 +1,56 @@
+SPDX-License-Identifier: (MIT OR GPL-3.0-or-later)
+SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: BSD-2-Clause
+SPDX-License-Identifier: ISC
+SPDX-License-Identifier: MIT
+SPDX-FileCopyrightText: @xmldom/xmldom developers
+SPDX-FileCopyrightText: David Myers <hello@davidmyers.dev>
+SPDX-FileCopyrightText: Evan You
+SPDX-FileCopyrightText: Fred Chasen
+SPDX-FileCopyrightText: John-David Dalton <john.david.dalton@gmail.com>
+SPDX-FileCopyrightText: Mariusz Nowak <medyk@medikoo.com> (http://www.medikoo.com/)
+SPDX-FileCopyrightText: Mariusz Nowak <medyk@medikoo.com> (https://www.medikoo.com/)
+SPDX-FileCopyrightText: Mozilla
+SPDX-FileCopyrightText: Stuart Knightley <stuart@stuartk.com>
+SPDX-FileCopyrightText: fchasen@gmail.com
+
+This file is generated from multiple sources. Included packages:
+- @xmldom/xmldom
+	- version: 0.7.13
+	- license: MIT
+- d
+	- version: 1.0.2
+	- license: ISC
+- epubjs
+	- version: 0.3.93
+	- license: BSD-2-Clause
+- es5-ext
+	- version: 0.10.64
+	- license: ISC
+- event-emitter
+	- version: 0.3.5
+	- license: MIT
+- jszip
+	- version: 3.10.1
+	- license: (MIT OR GPL-3.0-or-later)
+- localforage
+	- version: 1.10.0
+	- license: Apache-2.0
+- lodash
+	- version: 4.18.1
+	- license: MIT
+- marks-pane
+	- version: 1.0.9
+	- license: MIT
+- path-webpack
+	- version: 0.0.3
+	- license: MIT
+- type
+	- version: 2.7.3
+	- license: ISC
+- vite
+	- version: 7.3.6
+	- license: MIT
+- vite-plugin-node-polyfills
+	- version: 0.28.0
+	- license: MIT

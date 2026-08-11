@@ -1,14 +1,23 @@
 OC.L10N.register(
     "koreader_companion",
     {
+        "{percent}%": "{percent} %",
         "{percent}% read": "{percent}% gelesen",
         "_%n book_::_%n books_": [
             "%n Buch",
             "%n Bücher"
         ],
+        "_%n book could not be read_::_%n books could not be read_": [
+            "%n Buch konnte nicht gelesen werden",
+            "%n Bücher konnten nicht gelesen werden"
+        ],
         "_%n book is being processed. Its details will appear here shortly._::_%n books are being processed. Their details will appear here shortly._": [
             "%n Buch wird verarbeitet. Die Details erscheinen in Kürze hier.",
             "%n Bücher werden verarbeitet. Die Details erscheinen in Kürze hier."
+        ],
+        "_%n book still waiting. Press again to continue._::_%n books still waiting. Press again to continue._": [
+            "%n Buch wartet noch. Erneut drücken, um fortzufahren.",
+            "%n Bücher warten noch. Erneut drücken, um fortzufahren."
         ],
         "A separate password just for KOReader. It is not your Nextcloud password.": "Ein eigenes Passwort nur für KOReader. Es ist nicht dein Nextcloud-Passwort.",
         "A sync password is set.": "Ein Sync-Passwort ist gesetzt.",
@@ -30,6 +39,7 @@ OC.L10N.register(
         "Could not change the folder": "Der Ordner konnte nicht geändert werden",
         "Could not copy — select the text and copy manually": "Kopieren nicht möglich – markiere den Text und kopiere ihn manuell",
         "Could not delete the book": "Das Buch konnte nicht gelöscht werden",
+        "Could not extract metadata": "Metadaten konnten nicht ausgelesen werden",
         "Could not load settings": "Die Einstellungen konnten nicht geladen werden",
         "Could not load your library": "Deine Bibliothek konnte nicht geladen werden",
         "Could not save that setting": "Diese Einstellung konnte nicht gespeichert werden",
@@ -43,6 +53,8 @@ OC.L10N.register(
         "eBooks folder": "eBooks-Ordner",
         "Edit": "Bearbeiten",
         "Edit book details": "Buchdetails bearbeiten",
+        "Extract metadata now": "Metadaten jetzt auslesen",
+        "Extracting…": "Wird ausgelesen…",
         "File {index} of {total}: {name}": "Datei {index} von {total}: {name}",
         "Filenames": "Dateinamen",
         "Folder": "Ordner",
@@ -54,10 +66,14 @@ OC.L10N.register(
         "Issue": "Ausgabe",
         "KOReader sync": "KOReader-Sync",
         "Language": "Sprache",
+        "Larger text": "Größere Schrift",
         "Library": "Bibliothek",
         "Library updated": "Bibliothek aktualisiert",
         "Log in with your Nextcloud username and the sync password.": "Melde dich mit deinem Nextcloud-Benutzernamen und dem Sync-Passwort an.",
+        "Measuring…": "Wird vermessen …",
+        "Metadata extracted": "Metadaten ausgelesen",
         "New sync password": "Neues Sync-Passwort",
+        "Next page": "Nächste Seite",
         "No books match your search": "Keine Bücher passen zu deiner Suche",
         "No books yet": "Noch keine Bücher",
         "No sync password set yet — KOReader cannot sync until you set one.": "Noch kein Sync-Passwort gesetzt – KOReader kann erst synchronisieren, wenn eines gesetzt ist.",
@@ -66,9 +82,12 @@ OC.L10N.register(
         "Password": "Passwort",
         "Paste the URL above and enter your Nextcloud username and password.": "Füge die obige URL ein und gib deinen Nextcloud-Benutzernamen und dein Passwort an.",
         "Point KOReader’s progress sync at this server to keep your reading position across devices.": "Richte die Fortschritts-Synchronisation von KOReader auf diesen Server, damit deine Leseposition auf allen Geräten gleich bleibt.",
+        "Position in book": "Position im Buch",
+        "Previous page": "Vorherige Seite",
         "Publication date": "Erscheinungsdatum",
         "Publisher": "Verlag",
         "Queued for processing": "Zur Verarbeitung eingereiht",
+        "Read": "Lesen",
         "Reading details…": "Details werden gelesen …",
         "Recently added": "Kürzlich hinzugefügt",
         "Rename all existing books now": "Alle vorhandenen Bücher jetzt umbenennen",
@@ -86,10 +105,12 @@ OC.L10N.register(
         "Set document matching to binary checksum, not filename — filenames differ between devices.": "Stelle die Dokumentzuordnung auf binäre Prüfsumme, nicht auf Dateinamen – die Dateinamen unterscheiden sich je Gerät.",
         "Settings": "Einstellungen",
         "Skip": "Überspringen",
+        "Smaller text": "Kleinere Schrift",
         "Some files were skipped: unsupported format": "Einige Dateien wurden übersprungen: nicht unterstütztes Format",
         "Sort order": "Sortierung",
         "Sync password": "Sync-Passwort",
         "Sync password saved": "Sync-Passwort gespeichert",
+        "This book could not be opened": "Dieses Buch konnte nicht geöffnet werden",
         "Title": "Titel",
         "Try a different title or author.": "Versuche einen anderen Titel oder Autor.",
         "Unknown author": "Unbekannter Autor",

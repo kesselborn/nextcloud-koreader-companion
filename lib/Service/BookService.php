@@ -319,10 +319,22 @@ class BookService {
     }
 
     /**
+     * How many pending books one "extract now" request will work through.
+     *
+     * Bounded on purpose: the work is proportional to file size and the request
+     * is user-triggered, so an unbounded loop over a large library would hold a
+     * PHP worker for minutes. The UI reports what is left and can be clicked
+     * again.
+     */
+    public const PENDING_BATCH_LIMIT = 25;
+
+    /**
      * Extract metadata for one file and mark it done. Runs from the background
      * job, outside any upload transaction, so reading the file is safe here.
+     *
+     * @param bool $force Re-extract even if the row is already marked done.
      */
-    public function indexFile(Node $file, string $userId): void {
+    public function indexFile(Node $file, string $userId, bool $force = false): void {
         $fileId = $file->getId();
 
         // Deliberately not ensureFileInDatabase(): that skips a row whose
@@ -330,13 +342,26 @@ class BookService {
         // just stamped updated_at to now -- so it would decide there was nothing
         // to do and the book would sit there titled after its filename forever.
         $qb = $this->db->getQueryBuilder();
-        $result = $qb->select('id')
+        $result = $qb->select('id', 'indexing_state')
             ->from('koreader_metadata')
             ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
             ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId)))
             ->executeQuery();
         $row = $result->fetch();
         $result->closeCursor();
+
+        // Never overwrite a row that already holds real metadata. The web upload
+        // form writes the user's own title/author synchronously and marks the row
+        // done, but the file listener has already queued this job for the same
+        // file id -- so without this guard cron would silently replace whatever
+        // the user typed with the file's embedded metadata minutes later.
+        //
+        // 'pending' is the signal that extraction is still owed, and
+        // markFilePending() sets it again whenever the file itself changes, so a
+        // genuine re-index is unaffected.
+        if ($row && !$force && ($row['indexing_state'] ?? self::STATE_PENDING) === self::STATE_DONE) {
+            return;
+        }
 
         if ($row) {
             $this->updateFileMetadata($file, $userId, $row['id']);
@@ -350,6 +375,79 @@ class BookService {
             ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
             ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId)))
             ->executeStatement();
+    }
+
+    public function countPendingBooks(string $userId): int {
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select($qb->func()->count('*', 'pending'))
+            ->from('koreader_metadata')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('indexing_state', $qb->createNamedParameter(self::STATE_PENDING)))
+            ->executeQuery();
+        $count = (int)$result->fetchOne();
+        $result->closeCursor();
+
+        return $count;
+    }
+
+    /**
+     * Extract metadata for books still waiting on it, now, in this request.
+     *
+     * Nextcloud has no way to run a specific background job on demand -- web
+     * cron.php runs whatever job is next globally, and does nothing at all when
+     * the instance uses system cron -- so "extract now" has to do the work
+     * itself rather than poke the queue. That is safe here: unlike the upload
+     * listener, this runs in its own request with no open write transaction.
+     *
+     * The queued ExtractMetadataJob stays as it is. Whichever runs first marks
+     * the row done and the other one skips it.
+     *
+     * @return array{processed: int, failed: int, remaining: int}
+     */
+    public function processPendingBooks(string $userId, int $limit = self::PENDING_BATCH_LIMIT): array {
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select('file_id')
+            ->from('koreader_metadata')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('indexing_state', $qb->createNamedParameter(self::STATE_PENDING)))
+            ->orderBy('id', 'ASC')
+            ->setMaxResults(max(1, $limit))
+            ->executeQuery();
+        $fileIds = $result->fetchAll(\PDO::FETCH_COLUMN);
+        $result->closeCursor();
+
+        $processed = 0;
+        $failed = 0;
+
+        if ($fileIds !== []) {
+            $userFolder = $this->rootFolder->getUserFolder($userId);
+
+            foreach ($fileIds as $fileId) {
+                try {
+                    $nodes = $userFolder->getById((int)$fileId);
+                    if ($nodes === []) {
+                        // Gone since it was queued; the delete listener owns the row.
+                        continue;
+                    }
+                    $this->indexFile($nodes[0], $userId);
+                    $processed++;
+                } catch (\Throwable $e) {
+                    // One unreadable book must not abort the whole batch.
+                    $failed++;
+                    $this->logger->warning('On-demand metadata extraction failed for one file', [
+                        'app' => 'koreader_companion',
+                        'fileId' => $fileId,
+                        'exception' => $e,
+                    ]);
+                }
+            }
+        }
+
+        return [
+            'processed' => $processed,
+            'failed' => $failed,
+            'remaining' => $this->countPendingBooks($userId),
+        ];
     }
 
     public function syncFileMetadata(Node $file, string $userId): void {
@@ -1018,7 +1116,7 @@ class BookService {
     
     private function parseComicInfoXml($xmlContent, &$metadata) {
         try {
-            $xml = simplexml_load_string($xmlContent);
+            $xml = simplexml_load_string($xmlContent, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
             if (!$xml) {
                 return;
             }
@@ -1243,13 +1341,37 @@ class BookService {
             
             $response = new StreamResponse($file->fopen('r'));
             $response->addHeader('Content-Type', $this->getMimeType($format));
-            $response->addHeader('Content-Disposition', 'attachment; filename="' . $book['name'] . '"');
+            $response->addHeader('Content-Disposition', $this->contentDisposition((string)$book['name']));
             $response->addHeader('Content-Length', $file->getSize());
-            
+
             return $response;
         } catch (\Exception $e) {
             return new DataResponse(['error' => 'File not found'], 404);
         }
+    }
+
+    /**
+     * Build a Content-Disposition value that survives an awkward filename.
+     *
+     * The name used to be interpolated straight into the quoted string, so a `"`
+     * in a book title broke out of the value. RFC 6266 wants both forms: an
+     * ASCII-only `filename` for old clients and a percent-encoded `filename*`
+     * carrying the real, possibly non-ASCII name.
+     */
+    private function contentDisposition(string $name): string {
+        // Strip quotes, backslashes and control bytes -- none of them are legal in
+        // a quoted header value, and CR/LF are how header injection is attempted.
+        $ascii = preg_replace('/[^\x20-\x7e]/', '_', $name) ?? '';
+        $ascii = str_replace(['"', '\\'], '', $ascii);
+        if ($ascii === '') {
+            $ascii = 'book';
+        }
+
+        return sprintf(
+            'attachment; filename="%s"; filename*=UTF-8\'\'%s',
+            $ascii,
+            rawurlencode($name)
+        );
     }
 
     /**
@@ -1310,7 +1432,7 @@ class BookService {
                 return null;
             }
             
-            $container = simplexml_load_string($containerXml);
+            $container = simplexml_load_string($containerXml, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
             if (!$container) {
                 return null;
             }
@@ -1326,7 +1448,7 @@ class BookService {
                 return null;
             }
             
-            $opf = simplexml_load_string($opfContent);
+            $opf = simplexml_load_string($opfContent, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
             if (!$opf) {
                 return null;
             }

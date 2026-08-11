@@ -4,9 +4,12 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\FilenameService;
+use OCA\KoreaderCompanion\Service\SyncPasswordService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\AppFramework\Http\DataResponse;
@@ -22,6 +25,15 @@ use OCP\Util;
 use Psr\Log\LoggerInterface;
 
 class PageController extends Controller {
+
+    /**
+     * Upload ceiling, independent of PHP's own upload_max_filesize.
+     *
+     * 512 MB matches the cap the preview providers already enforce
+     * (CoverProvider::MAX_FILE_SIZE), so the two do not disagree about what is
+     * too big to look at.
+     */
+    private const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
     private $bookService;
     private $config;
@@ -46,7 +58,8 @@ class PageController extends Controller {
         IRootFolder $rootFolder,
         DocumentHashGenerator $hashGenerator,
         IInitialState $initialState,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        private SyncPasswordService $syncPasswords
     ) {
         parent::__construct($appName, $request);
         $this->bookService = $bookService;
@@ -118,7 +131,20 @@ class PageController extends Controller {
         Util::addScript($this->appName, 'koreader_companion-main');
         Util::addStyle($this->appName, 'koreader_companion-main');
 
-        return new TemplateResponse($this->appName, 'page');
+        $response = new TemplateResponse($this->appName, 'page');
+
+        // The EPUB reader unpacks the book in the browser and hands the chapters,
+        // stylesheets, fonts and images to an iframe as blob: URLs. Scripts stay
+        // disallowed -- book content has no business running any.
+        $csp = new ContentSecurityPolicy();
+        $csp->addAllowedFrameDomain('blob:');
+        $csp->addAllowedStyleDomain('blob:');
+        $csp->addAllowedFontDomain('blob:');
+        $csp->addAllowedImageDomain('blob:');
+        $csp->addAllowedMediaDomain('blob:');
+        $response->setContentSecurityPolicy($csp);
+
+        return $response;
     }
 
     #[NoAdminRequired]
@@ -128,22 +154,15 @@ class PageController extends Controller {
             return new DataResponse(['error' => 'Not logged in'], 401);
         }
         
-        $password = $this->request->getParam('password', '');
-        if (empty($password)) {
-            return new DataResponse(['error' => 'Password is required'], 400);
+        $password = (string)$this->request->getParam('password', '');
+
+        // Length is checked server-side now. It used to be an empty() check here
+        // and a four-character rule in the browser, so a one-character sync
+        // password was accepted by anyone calling the endpoint directly.
+        $error = $this->syncPasswords->setPassword($user->getUID(), $password);
+        if ($error !== null) {
+            return new DataResponse(['error' => $error], 400);
         }
-        
-        // Store MD5 hash for KOReader authentication compatibility
-        // KOReader protocol requires MD5, so we store MD5 hash (not plain password)
-        $md5Hash = md5($password);
-        // FLAG_SENSITIVE keeps the hash out of config listings and support dumps.
-        $this->config->setValueString(
-            $user->getUID(),
-            'koreader_companion',
-            'koreader_sync_password',
-            $md5Hash,
-            flags: IUserConfig::FLAG_SENSITIVE
-        );
 
         return new DataResponse([]);
     }
@@ -156,21 +175,25 @@ class PageController extends Controller {
             return new DataResponse(['error' => 'Not logged in'], 401);
         }
         
-        $hashedPassword = $this->config->getValueString($user->getUID(), 'koreader_companion', 'koreader_sync_password', '');
-        
         return new DataResponse([
             'password' => '', // Never return actual password for security
-            'has_password' => !empty($hashedPassword)
+            'has_password' => $this->syncPasswords->hasPassword($user->getUID())
         ]);
     }
 
     #[NoAdminRequired]
+    #[UserRateLimit(limit: 30, period: 60)]
     public function uploadBook() {
         try {
             // Get the uploaded file
             $uploadedFiles = $this->request->getUploadedFile('file');
             if (!$uploadedFiles || !isset($uploadedFiles['tmp_name'])) {
                 return new JSONResponse(['error' => 'No file uploaded'], Http::STATUS_BAD_REQUEST);
+            }
+
+            $rejection = $this->rejectUnacceptableUpload($uploadedFiles);
+            if ($rejection !== null) {
+                return $rejection;
             }
 
             // Get the user's configured eBooks folder
@@ -190,8 +213,10 @@ class PageController extends Controller {
                 $booksFolder = $userFolder->newFolder($folderName);
             }
 
-            // Upload the file first
-            $originalFilename = $uploadedFiles['name'];
+            // Upload the file first. The name is sanitised before it ever reaches
+            // newFile(): core does validate paths, but relying on that alone left
+            // the app's own naming rules unenforced whenever auto-rename was off.
+            $originalFilename = $this->filenameService->sanitizeUploadFilename($uploadedFiles['name']);
             $tempFilename = 'temp_' . time() . '_' . $originalFilename;
             $tempFile = $booksFolder->newFile($tempFilename);
             $tempFile->putContent(file_get_contents($uploadedFiles['tmp_name']));
@@ -259,17 +284,25 @@ class PageController extends Controller {
             ]);
 
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return $this->internalError('Upload failed', $e);
         }
     }
 
     #[NoAdminRequired]
+    #[UserRateLimit(limit: 30, period: 60)]
     public function extractMetadata() {
+        $tempFile = null;
+
         try {
             // Get the uploaded file
             $uploadedFiles = $this->request->getUploadedFile('file');
             if (!$uploadedFiles || !isset($uploadedFiles['tmp_name'])) {
                 return new JSONResponse(['error' => 'No file uploaded'], Http::STATUS_BAD_REQUEST);
+            }
+
+            $rejection = $this->rejectUnacceptableUpload($uploadedFiles);
+            if ($rejection !== null) {
+                return $rejection;
             }
 
             // Get user and folder
@@ -280,23 +313,77 @@ class PageController extends Controller {
             $userFolder = $this->rootFolder->getUserFolder($user->getUID());
 
             // Create temporary file for metadata extraction
-            $tempFilename = 'temp_extract_' . time() . '_' . $uploadedFiles['name'];
+            $tempFilename = 'temp_extract_' . time() . '_'
+                . $this->filenameService->sanitizeUploadFilename($uploadedFiles['name']);
             $tempFile = $userFolder->newFile($tempFilename);
             $tempFile->putContent(file_get_contents($uploadedFiles['tmp_name']));
 
             // Extract metadata
             $metadata = $this->bookService->extractMetadataForUpload($tempFile);
 
-            // Clean up temporary file
-            $tempFile->delete();
-
             return new JSONResponse([
                 'metadata' => $metadata
             ]);
 
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return $this->internalError('Could not read metadata from that file', $e);
+        } finally {
+            // In a finally block, not on the happy path: an exception between
+            // newFile() and here used to leave the temp file sitting in the root
+            // of the user's Nextcloud.
+            if ($tempFile !== null) {
+                try {
+                    $tempFile->delete();
+                } catch (\Throwable $e) {
+                    $this->logger->warning('Could not remove metadata extraction temp file', [
+                        'app' => 'koreader_companion',
+                        'exception' => $e,
+                    ]);
+                }
+            }
         }
+    }
+
+    /**
+     * Reject anything the library cannot hold, before it is written to storage.
+     *
+     * Extension filtering used to live only in the browser, and
+     * SUPPORTED_EXTENSIONS gated indexing rather than upload -- so the endpoint
+     * accepted any file type and any size PHP would take.
+     */
+    private function rejectUnacceptableUpload(array $uploadedFile): ?JSONResponse {
+        $extension = strtolower(pathinfo((string)($uploadedFile['name'] ?? ''), PATHINFO_EXTENSION));
+
+        if (!in_array($extension, BookService::SUPPORTED_EXTENSIONS, true)) {
+            return new JSONResponse([
+                'error' => 'Unsupported file type. Supported: '
+                    . implode(', ', BookService::SUPPORTED_EXTENSIONS),
+            ], Http::STATUS_UNSUPPORTED_MEDIA_TYPE);
+        }
+
+        $size = (int)($uploadedFile['size'] ?? 0);
+        if ($size > self::MAX_UPLOAD_BYTES) {
+            return new JSONResponse([
+                'error' => 'That file is larger than the ' . (self::MAX_UPLOAD_BYTES >> 20) . ' MB limit',
+            ], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+        }
+
+        return null;
+    }
+
+    /**
+     * Log the detail, tell the client nothing it can use.
+     *
+     * These handlers used to return $e->getMessage() verbatim, which handed any
+     * authenticated user absolute filesystem paths and database driver errors.
+     */
+    private function internalError(string $message, \Throwable $e): JSONResponse {
+        $this->logger->error($message, [
+            'app' => 'koreader_companion',
+            'exception' => $e,
+        ]);
+
+        return new JSONResponse(['error' => $message], Http::STATUS_INTERNAL_SERVER_ERROR);
     }
 
     #[NoAdminRequired]
@@ -388,8 +475,54 @@ class PageController extends Controller {
             return new JSONResponse([]);
 
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return $this->internalError('Could not save the metadata', $e);
         }
+    }
+
+    /**
+     * Extract metadata for books still marked pending, in this request.
+     *
+     * Nextcloud offers no way to run one specific background job on demand, so
+     * the "extract now" button in the library cannot poke the queue -- it has to
+     * do the work. Bounded to PENDING_BATCH_LIMIT per call and rate-limited,
+     * because the cost scales with file size.
+     */
+    #[NoAdminRequired]
+    #[UserRateLimit(limit: 10, period: 60)]
+    public function processPending() {
+        $user = $this->userSession->getUser();
+        if (!$user) {
+            return new JSONResponse(['error' => 'Not logged in'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        try {
+            return new JSONResponse($this->bookService->processPendingBooks($user->getUID()));
+        } catch (\Exception $e) {
+            return $this->internalError('Could not extract metadata', $e);
+        }
+    }
+
+    /**
+     * Raw file bytes for the in-browser reader.
+     *
+     * The OPDS download route needs Basic Auth, and /f/{fileId} answers with a
+     * redirect into the Files app, so neither can be fetched from the web UI.
+     * This one is plain session auth and hands back the file itself.
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[UserRateLimit(limit: 120, period: 60)]
+    public function bookFile($id) {
+        if (!is_numeric($id)) {
+            return new JSONResponse(['error' => 'Invalid book ID'], Http::STATUS_BAD_REQUEST);
+        }
+
+        $book = $this->bookService->getBookById((int)$id);
+        if (!$book) {
+            return new JSONResponse(['error' => 'Book not found'], Http::STATUS_NOT_FOUND);
+        }
+
+        return $this->bookService->downloadBook($book, $book['format']);
     }
 
     /**
@@ -430,7 +563,7 @@ class PageController extends Controller {
             return new JSONResponse([]);
 
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return $this->internalError('Could not delete that book', $e);
         }
     }
 
@@ -474,7 +607,13 @@ class PageController extends Controller {
                 }
                 
                 $updateQb->set('file_path', $updateQb->createNamedParameter($filePath))
-                    ->set('updated_at', $updateQb->createNamedParameter($currentTime));
+                    ->set('updated_at', $updateQb->createNamedParameter($currentTime))
+                    // This row now holds real metadata -- the user's own, typed
+                    // into the upload form. Marking it done both stops the UI
+                    // claiming it is still processing and stops the queued
+                    // ExtractMetadataJob overwriting those values on the next
+                    // cron run (BookService::indexFile skips done rows).
+                    ->set('indexing_state', $updateQb->createNamedParameter(BookService::STATE_DONE));
 
                 $updateQb->executeStatement();
             } else {
@@ -496,6 +635,7 @@ class PageController extends Controller {
                         'issue' => $insertQb->createNamedParameter($metadata['issue'] ?? null),
                         'volume' => $insertQb->createNamedParameter($metadata['volume'] ?? null),
                         'tags' => $insertQb->createNamedParameter($metadata['tags'] ?? null),
+                        'indexing_state' => $insertQb->createNamedParameter(BookService::STATE_DONE),
                         'created_at' => $insertQb->createNamedParameter($currentTime),
                         'updated_at' => $insertQb->createNamedParameter($currentTime),
                     ]);
