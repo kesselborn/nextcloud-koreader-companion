@@ -527,6 +527,14 @@ processed" was.
       on, saved, and the stored row is `/body/DocFragment[12]/body/div/p[21]/text()[1].161` — the shape a
       device emits, including omitting the `[1]` index KOReader leaves off. Reopening showed
       "Resumed from Nextcloud Web" (exact path, not the percentage fallback)
+- [x] 11.8 Saving now refreshes the library card, which kept showing the progress it was rendered with
+      and so made saving look like it had done nothing
+- [x] 11.9 Page numbers next to the percentage — real ones when the book has a page-list, otherwise
+      derived from the locations index already built for the percentage. Those are evenly sized chunks
+      rather than typeset pages, so they are approximate by construction
+- [x] 11.10 Prompt copy rewritten to name the consequence rather than the mechanism: it says which
+      device's position is being replaced, and the buttons say what they do ("Leave it unchanged" /
+      "Continue here on my devices") instead of Save/Discard
 - [ ] 11.6 **Untested against real hardware.** The round trip is proven browser-to-browser and the format
       matches what Readest and kobo_clara emit, but no actual KOReader device has yet been asked to
       *consume* a position this app wrote. Worth one confirmation before trusting it with a real reading
