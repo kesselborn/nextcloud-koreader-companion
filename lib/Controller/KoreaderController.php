@@ -306,7 +306,30 @@ class KoreaderController extends Controller {
         return $count;
     }
 
+    /**
+     * Fit client-supplied values to the columns that hold them.
+     *
+     * Every one of these is attacker- or device-controlled and went into the
+     * insert unchecked, so anything too long produced a 500 rather than a stored
+     * position. That is not hypothetical: percentage was varchar(10) and a real
+     * KOReader client sends full float precision ('0.6333333333333333', 18
+     * characters), so no device progress was ever stored while the test suite --
+     * which sends '0.25' -- stayed green.
+     */
+    private function normalizePercentage($percentage): string {
+        $value = is_numeric($percentage) ? (float)$percentage : 0.0;
+        $value = max(0.0, min(1.0, $value));
+
+        // Six decimals is finer than any reader's page granularity, and bounded.
+        return rtrim(rtrim(number_format($value, 6, '.', ''), '0'), '.') ?: '0';
+    }
+
     private function saveDocumentProgress($userId, $document, $progress, $percentage, $device, $deviceId) {
+        $percentage = $this->normalizePercentage($percentage);
+        // Both columns are varchar(100); a longer device name would fail the same way.
+        $device = mb_substr((string)$device, 0, 100);
+        $deviceId = mb_substr((string)$deviceId, 0, 100);
+
         $qb = $this->db->getQueryBuilder();
         
         // Check if progress exists
