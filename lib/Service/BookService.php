@@ -1,6 +1,7 @@
 <?php
 namespace OCA\KoreaderCompanion\Service;
 
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\Config\IUserConfig;
@@ -168,23 +169,8 @@ class BookService {
                ->setFirstResult($offset)
                ->setMaxResults($perPage);
 
-            // Apply sorting
-            switch ($sort) {
-                case 'recent':
-                    $qb->orderBy('created_at', 'DESC');
-                    break;
-                case 'author':
-                    $qb->orderBy('author', 'ASC')->addOrderBy('title', 'ASC');
-                    break;
-                case 'publication_date':
-                    $qb->orderBy('publication_date', 'DESC');
-                    break;
-                case 'title':
-                default:
-                    $qb->orderBy('title', 'ASC');
-                    break;
-            }
-               
+            $this->applySort($qb, $sort);
+
             $result = $qb->executeQuery();
             $books = [];
             
@@ -204,6 +190,31 @@ class BookService {
             ]);
             // Fallback to filesystem scanning
             return $this->getBooks();
+        }
+    }
+
+    /**
+     * Apply a sort order, from an allow-list.
+     *
+     * Shared so the list and the search cannot drift apart -- they had, with
+     * search hardcoding title. The switch is also what keeps a request parameter
+     * out of an ORDER BY clause.
+     */
+    private function applySort(IQueryBuilder $qb, string $sort): void {
+        switch ($sort) {
+            case 'recent':
+                $qb->orderBy('created_at', 'DESC');
+                break;
+            case 'author':
+                $qb->orderBy('author', 'ASC')->addOrderBy('title', 'ASC');
+                break;
+            case 'publication_date':
+                $qb->orderBy('publication_date', 'DESC');
+                break;
+            case 'title':
+            default:
+                $qb->orderBy('title', 'ASC');
+                break;
         }
     }
 
@@ -1261,10 +1272,10 @@ class BookService {
     }
 
 
-    public function searchBooks($query, $page = null, $perPage = null, $skipMetadataUpdate = false) {
+    public function searchBooks($query, $page = null, $perPage = null, $skipMetadataUpdate = false, $sort = 'title') {
         // If pagination parameters are provided, use database-based search
         if ($page !== null && $perPage !== null) {
-            return $this->getPaginatedSearchResults($query, $page, $perPage, $skipMetadataUpdate);
+            return $this->getPaginatedSearchResults($query, $page, $perPage, $skipMetadataUpdate, $sort);
         }
         
         // Otherwise, maintain backward compatibility with in-memory search
@@ -1291,7 +1302,7 @@ class BookService {
     /**
      * Get paginated search results from database
      */
-    private function getPaginatedSearchResults($query, $page = 1, $perPage = 20, $skipMetadataUpdate = false) {
+    private function getPaginatedSearchResults($query, $page = 1, $perPage = 20, $skipMetadataUpdate = false, $sort = 'title') {
         $user = $this->userSession->getUser();
         if (!$user) {
             return [];
@@ -1306,7 +1317,7 @@ class BookService {
         }
 
         if (empty($query)) {
-            return $this->getPaginatedBooks($page, $perPage);
+            return $this->getPaginatedBooks($page, $perPage, $sort);
         }
 
         try {
@@ -1323,9 +1334,10 @@ class BookService {
                    $qb->expr()->iLike('series', $qb->createNamedParameter('%' . $query . '%')),
                    $qb->expr()->iLike('subject', $qb->createNamedParameter('%' . $query . '%')),
                    $qb->expr()->iLike('tags', $qb->createNamedParameter('%' . $query . '%'))
-               ))
-               ->orderBy('title', 'ASC')
-               ->setFirstResult($offset)
+               ));
+
+            $this->applySort($qb, $sort);
+            $qb->setFirstResult($offset)
                ->setMaxResults($perPage);
                
             $result = $qb->executeQuery();

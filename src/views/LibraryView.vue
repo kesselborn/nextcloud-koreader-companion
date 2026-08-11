@@ -19,6 +19,7 @@
 				:clearable="false"
 				label="label"
 				:reduce="option => option.value"
+				:input-label="t('koreader_companion', 'Sort by')"
 				:aria-label-combobox="t('koreader_companion', 'Sort order')"
 				class="library__sort"
 				@update:model-value="reload" />
@@ -76,7 +77,8 @@
 				:key="book.id"
 				:book="book"
 				@edit="$emit('edit', book)"
-				@read="$emit('read', book)" />
+				@read="$emit('read', book)"
+				@search-author="searchAuthor" />
 		</ul>
 
 		<NcLoadingIcon v-if="loading" :size="32" class="library__loading" />
@@ -204,6 +206,19 @@ export default {
 				// A failed refresh is not worth interrupting the user; the next
 				// tick tries again.
 			}
+		},
+
+		/**
+		 * Put an author into the search box and run the search.
+		 *
+		 * Goes through the same query the user could have typed rather than a
+		 * dedicated author filter, so the box reflects what is on screen and can be
+		 * edited or cleared normally.
+		 */
+		searchAuthor(author) {
+			this.query = author
+			clearTimeout(this.debounce)
+			this.reload()
 		},
 
 		/**

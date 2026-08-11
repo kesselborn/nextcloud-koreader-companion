@@ -62,7 +62,18 @@
 			<span v-if="pending" class="book__author book__author--pending">
 				{{ t('koreader_companion', 'Queued for processing') }}
 			</span>
-			<span v-else class="book__author">{{ book.author || t('koreader_companion', 'Unknown author') }}</span>
+			<!-- A button, not a span with a click handler: this is an action, so it
+			     needs to be reachable by keyboard and announced as one. Falls back to
+			     plain text when there is no author to search for. -->
+			<button
+				v-else-if="book.author"
+				type="button"
+				class="book__author book__author--link"
+				:title="t('koreader_companion', 'Search for books of this author')"
+				@click="$emit('search-author', book.author)">
+				{{ book.author }}
+			</button>
+			<span v-else class="book__author">{{ t('koreader_companion', 'Unknown author') }}</span>
 			<span v-if="progress" class="book__sync">
 				{{ percentageLabel }}
 				<span v-if="book.progress.device" class="book__device">· {{ book.progress.device }}</span>
@@ -105,7 +116,7 @@ export default {
 		},
 	},
 
-	emits: ['edit', 'read'],
+	emits: ['edit', 'read', 'search-author'],
 
 	data() {
 		return {
@@ -217,6 +228,31 @@ export default {
 
 	&__author--pending {
 		font-style: italic;
+	}
+
+	// Reset the <button> back to looking like the text it replaced -- the element
+	// is a button for keyboard and screen-reader reasons, not for its appearance.
+	&__author--link {
+		appearance: none;
+		background: none;
+		border: 0;
+		padding: 0;
+		margin: 0;
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			color: var(--color-main-text);
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--color-primary-element);
+			outline-offset: 1px;
+			border-radius: 2px;
+		}
 	}
 
 	&__progress {

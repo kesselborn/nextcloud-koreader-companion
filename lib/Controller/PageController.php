@@ -93,12 +93,17 @@ class PageController extends Controller {
                   ($this->request->getHeader('X-Requested-With') === 'XMLHttpRequest');
         
         if ($isAjax) {
+            // The sort parameter was read nowhere: this passed a hardcoded 'title'
+            // and the search path hardcoded its own ORDER BY, so the sort control
+            // in the UI had no effect at all. BookService allow-lists the value.
+            $sort = (string)$this->request->getParam('sort', 'title');
+
             // For AJAX requests, skip metadata updates (performance optimization)
             // Metadata is updated on initial page load and file uploads
             if (empty($query)) {
-                $books = $this->bookService->getBooks($page, $perPage, 'title', true);
+                $books = $this->bookService->getBooks($page, $perPage, $sort, true);
             } else {
-                $books = $this->bookService->searchBooks($query, $page, $perPage, true);
+                $books = $this->bookService->searchBooks($query, $page, $perPage, true, $sort);
             }
             return new JSONResponse($books);
         }
