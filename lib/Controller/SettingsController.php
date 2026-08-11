@@ -97,6 +97,10 @@ class SettingsController extends Controller {
         // Automatically clear library metadata when folder changes
         if ($isFolderChanging) {
             $cleared = $this->clearLibraryMetadata($userId);
+
+            // The reconciliation walk is throttled, so without this the new
+            // folder would look empty until the interval elapsed.
+            $this->config->setValueString($userId, $this->appName, 'last_reconcile', '0');
             return new JSONResponse([
                 'folder_changed' => true,
                 'cleared' => $cleared,
@@ -186,7 +190,9 @@ class SettingsController extends Controller {
 
         // OPTIMIZATION: Sync filesystem metadata ONCE at start of batch operation
         // This eliminates 50+ redundant filesystem scans
-        $this->bookService->ensureMetadataUpToDate($userId);
+        // Forced: a rename pass has to see the current filesystem, not whatever
+        // the throttled reconciliation last recorded.
+        $this->bookService->ensureMetadataUpToDate($userId, true);
 
         $this->updateBatchRenameProgress($userId, 5, 0, $totalBooks, 'Scanning library...');
 

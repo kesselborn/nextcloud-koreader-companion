@@ -204,7 +204,26 @@ class BookService {
      * Ensure metadata database is up to date by scanning filesystem
      * Optimized to load all metadata in one query instead of per-file queries
      */
-    public function ensureMetadataUpToDate($userId) {
+    /**
+     * How often the filesystem reconciliation walk may run, per user.
+     *
+     * The database is kept current in real time by FileCreationListener and
+     * ExtractMetadataJob. This walk is the safety net for files that arrived
+     * without an event -- `occ files:scan`, a restore from backup, an external
+     * storage mount -- so it does not have to happen on every request.
+     *
+     * It used to. Every OPDS feed, facet feed and library listing triggered a
+     * full recursive directory walk of the library, which is the bulk of the
+     * amplification an anonymous caller with valid credentials could provoke.
+     * Five minutes matches Nextcloud's own stock cron cadence.
+     */
+    private const RECONCILE_INTERVAL_SECONDS = 300;
+
+    public function ensureMetadataUpToDate($userId, bool $force = false) {
+        if (!$force && !$this->reconcileIsDue($userId)) {
+            return;
+        }
+
         try {
             $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
             $userFolder = $this->rootFolder->getUserFolder($userId);
@@ -224,11 +243,23 @@ class BookService {
             $this->syncFolderToDatabase($booksFolder, $userId, $existingMetadata);
 
             $this->cleanupOrphanedMetadata($userId);
+
+            $this->markReconciled($userId);
         } catch (\Exception $e) {
             $this->logger->error('Failed to update metadata', [
                 'exception' => $e
             ]);
         }
+    }
+
+    private function reconcileIsDue(string $userId): bool {
+        $last = (int)$this->config->getValueString($userId, 'koreader_companion', 'last_reconcile', '0');
+
+        return (time() - $last) >= self::RECONCILE_INTERVAL_SECONDS;
+    }
+
+    private function markReconciled(string $userId): void {
+        $this->config->setValueString($userId, 'koreader_companion', 'last_reconcile', (string)time());
     }
 
     private function loadExistingMetadata(string $userId): array {
@@ -1311,16 +1342,71 @@ class BookService {
     }
 
 
+    /**
+     * One book, by file id.
+     *
+     * Looked up in SQL. This used to call getBooks() and walk the result
+     * comparing ids, which meant a full recursive scan and parse of the library
+     * for every single download, cover and reader open -- work proportional to
+     * the library size to answer a question about one row.
+     *
+     * Ownership still holds: the row is scoped to the session user, and
+     * convertDatabaseRowToBookArray() resolves the file through that user's own
+     * folder, so a foreign file id finds nothing.
+     */
     public function getBookById($id) {
-        $allBooks = $this->getBooks();
-        
-        foreach ($allBooks as $book) {
-            if ($book['id'] == intval($id)) {
-                return $book;
-            }
+        $user = $this->userSession->getUser();
+        if (!$user) {
+            return null;
         }
-        
-        return null;
+
+        $userId = $user->getUID();
+        $fileId = (int)$id;
+
+        $book = $this->findBookRow($userId, $fileId);
+        if ($book !== null) {
+            return $book;
+        }
+
+        // Not indexed yet -- a file can exist before the listener or the
+        // background job has caught up. Resolve that one file and index it,
+        // rather than falling back to scanning everything.
+        try {
+            $nodes = $this->rootFolder->getUserFolder($userId)->getById($fileId);
+            if ($nodes === []) {
+                return null;
+            }
+
+            $file = $nodes[0];
+            $extension = strtolower(pathinfo($file->getName(), PATHINFO_EXTENSION));
+            if (!in_array($extension, self::SUPPORTED_EXTENSIONS, true)) {
+                return null;
+            }
+
+            $this->indexFile($file, $userId);
+        } catch (\Exception $e) {
+            $this->logger->error('Failed to index a book on demand', [
+                'app' => 'koreader_companion',
+                'fileId' => $fileId,
+                'exception' => $e,
+            ]);
+            return null;
+        }
+
+        return $this->findBookRow($userId, $fileId);
+    }
+
+    private function findBookRow(string $userId, int $fileId): ?array {
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select('*')
+            ->from('koreader_metadata')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId)))
+            ->executeQuery();
+        $row = $result->fetch();
+        $result->closeCursor();
+
+        return $row ? $this->convertDatabaseRowToBookArray($row, $userId) : null;
     }
 
     public function downloadBook($book, $format) {
