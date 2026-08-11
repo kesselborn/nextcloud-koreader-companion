@@ -6,6 +6,7 @@ use OCA\KoreaderCompanion\Service\FilenameService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Config\IUserConfig;
 use OCP\IRequest;
@@ -58,6 +59,33 @@ class SettingsController extends Controller {
         }
 
         $userId = $user->getUID();
+
+        // Validated before it is persisted. This used to write whatever string
+        // arrived, unchecked -- and an empty value makes $userFolder->get('')
+        // resolve to the user's *root*, which turned every library listing into a
+        // recursive scan and parse of their entire Nextcloud.
+        $folder = trim((string)$folder, " \t\n\r\0\x0B/");
+        if ($folder === '') {
+            return new JSONResponse(['error' => 'Please choose a folder'], 400);
+        }
+
+        $userFolder = $this->rootFolder->getUserFolder($userId);
+        try {
+            $target = $userFolder->get($folder);
+        } catch (\OCP\Files\NotFoundException $e) {
+            return new JSONResponse(['error' => 'That folder does not exist'], 404);
+        }
+
+        if ($target->getType() !== \OCP\Files\FileInfo::TYPE_FOLDER) {
+            return new JSONResponse(['error' => 'That is a file, not a folder'], 400);
+        }
+
+        // Belt and braces against traversal: whatever the string looked like, the
+        // resolved node has to sit inside this user's own folder.
+        if (!str_starts_with($target->getPath(), rtrim($userFolder->getPath(), '/') . '/')) {
+            return new JSONResponse(['error' => 'That folder is outside your files'], 400);
+        }
+
         $currentFolder = $this->config->getValueString($userId, $this->appName, 'folder', 'eBooks');
 
         // Check if folder is actually changing
@@ -96,6 +124,10 @@ class SettingsController extends Controller {
     }
 
     #[NoAdminRequired]
+    // Walks and renames the whole library synchronously, so one press is minutes
+    // of a PHP worker. Moving it to IJobList is the real fix (tracked as 8.2c);
+    // until then a rate limit stops it being an amplifier.
+    #[UserRateLimit(limit: 2, period: 300)]
     public function batchRename($auto_rename) {
         $user = $this->getAuthenticatedUser();
         if ($user instanceof JSONResponse) {
@@ -131,7 +163,13 @@ class SettingsController extends Controller {
             return $this->processBatchRenameImmediate($userId, $userFolder, $totalBooks);
 
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => 'Batch rename failed: ' . $e->getMessage()], 500);
+            // The exception text used to go straight to the client, exposing
+            // absolute paths and driver errors.
+            $this->logger->error('Batch rename failed', [
+                'app' => $this->appName,
+                'exception' => $e,
+            ]);
+            return new JSONResponse(['error' => 'Batch rename failed'], 500);
         }
     }
 
