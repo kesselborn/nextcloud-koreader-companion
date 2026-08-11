@@ -208,12 +208,12 @@
       is the point. <strong>Two things are still open, and one of them is the deployment gate.</strong>
     </p>
     <pre><code><b>Still open</b>
-  H1b  listings re-scan and re-parse the whole folder per request;
-       getBookById() is still an O(library) scan          <b>&larr; deployment gate</b>
   M2   IUserSession::setUser() from a header on a public route
 
 <b>Fixed</b>
   H1a  tryAutoIndex bounded to 200 files per request
+  H1b  getBookById() is now an indexed SQL lookup; the reconciliation
+       walk is throttled to once per 5 min per user
   H1c  batchRename rate-limited (2 per 5 min); job move still owed
   M1   sync password now stored under password_hash(), legacy MD5
        accepted once and transparently upgraded; 8-char server-side floor
@@ -223,6 +223,17 @@
   M6   folder setting validated (empty no longer resolves to the user root)
   L1-L6  all six
   plus  the metadata-revert bug, and an "Extract metadata now" button</code></pre>
+    <p class="note">
+      <strong>Honest correction on H1b.</strong> The structural claim holds &mdash; a download no longer
+      costs work proportional to the library &mdash; but the measured win is far smaller than the
+      finding below implies, and the finding overstated the mechanism. Benchmarked at 307 books against
+      the pre-fix commit: the OPDS feed was unchanged within noise (~0.75s either way) and a single
+      download went from ~0.84s to ~0.79s, about 6%. Two reasons. The fixtures were 300 copies of one
+      small EPUB, so per-file parsing was cheap; real multi-megabyte books should widen the gap, but
+      <em>that is not demonstrated here</em>. And the reconciliation walk already skipped unchanged
+      files, so it was re-walking the directory tree on every request, not re-parsing every book as
+      H1b claims below.
+    </p>
     <p class="note">
       <strong>Verified on a live Nextcloud 34.0.2.</strong> OPDS 29/29 and KOReader 13/13. The M1
       migration was proved on the real upgrade path: stored as a bare MD5, first sync authenticated via

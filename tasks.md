@@ -388,8 +388,8 @@ processed" was.
 - `2.14b` → folded into **8.10** · `2.21b` `declare(strict_types=1)` · `2.25` NULL hash columns
 - `4.12` → half closed by **8.8**; psalm/tests remain as `8.8b` · `6.6` backend i18n strings
 - `7.5` commit the reader · `7.6` pin the reader's security assumption
-- **`8.2b` — the remaining deployment gate.** Listings still re-scan and re-parse the whole folder per
-  request; `getBookById()` is still an O(library) scan. Everything else in Phase 8 is done
+- **`8.2b` done** — `getBookById()` is an indexed SQL lookup and the reconciliation walk is throttled
+  to once per 5 min per user. Measured win was modest (see V7); the structural fix is the point
 - `8.2c` batchRename → `IJobList` · `8.8b` psalm/tests · `8.10` drop `setUser()` (= `2.14b`)
 - `9.1`–`9.5` make background jobs actually run — **9.1 first**, it makes 2.24 testable at all
 
@@ -414,3 +414,14 @@ processed" was.
       a press untouched (`processed:0`), so re-extraction can no longer discard what the user typed
 - [ ] V6 Still unproven: `8.5` upload validation, `8.6` folder validation and `8.11` header escaping
       have no test coverage — they were verified by reading, not by running. Needs `8.8b`/`4.12`
+- [x] V7 **`8.2b` benchmarked, and the win is smaller than the audit claimed.** 307 books, measured
+      against the pre-fix commit by checking it out (the repo is bind-mounted, so the container picks
+      it up live): OPDS feed unchanged within noise (~0.75s either way), single download ~0.84s → ~0.79s,
+      about 6%. Caveats worth keeping: the fixtures were 300 copies of one small EPUB so per-file
+      parsing was cheap, and the reconciliation walk already skipped unchanged files — it was
+      re-walking the directory tree every request, not re-parsing every book as the finding said. The
+      structural fix (O(library) → indexed lookup) is still right and should widen with real
+      multi-megabyte books, but **that is not demonstrated**. Re-measure with a real library
+- [x] V8 Cron sidecar proved end-to-end: a WebDAV upload landed as `pending` titled after its filename
+      and was `Der Prozess` / `Franz Kafka` within 10s, unattended. The throttle from `8.2b` does not
+      hide new files — the listener writes the row, so an upload still appears in the feed immediately
