@@ -55,8 +55,10 @@ Moved out of Phase 1:
 - [x] 2.12 Controller annotations → PHP attributes: `PageController` (7 methods) — **`NoCSRFRequired` dropped from the 5 writers (S2)**
 - [x] 2.13 Controller annotations → PHP attributes: `SettingsController` (5 methods) — **`NoCSRFRequired` dropped from 3 writers (S2)**
 - [x] 2.14 `KoreaderController` — `#[BruteForceProtection]` + `hash_equals()` (**S1**); verified 401×10 then 429
-- [ ] 2.14b Stop using `IUserSession::setUser()` — needs BookService to take an explicit user (it reads the
-      session in 11 places); deferred rather than risked alongside the security fix
+- [x] 2.14b Done, as `8.10`. Not the refactor imagined here: reading the session in `BookService` is
+      correct for the web UI, so the fix was to stop *one caller faking a session*, not to purge the
+      reads. `BookService::runAs()` gives an explicit acting user, scoped and unwound; `IUserSession` is
+      gone from `KoreaderController` entirely
 - [x] 2.15 Replaced `IConfig` with `IUserConfig` (21 sites, 7 files); sync password written with
       `FLAG_SENSITIVE`. Note: the sensitive flag is **code-verified only** — the sole write path is a
       session-authed writer that now requires a CSRF token, and neither Basic auth nor an app password
@@ -202,7 +204,10 @@ Undocumented until now: this shipped as working-tree changes with no task coveri
       be separated from the extraction button: both touch `PageController.php`, `BookService.php` and
       `routes.php`, and by the time they were committed the split was only possible per file. They share
       one commit, which says so
-- [ ] 7.6 Pin the security assumption in code: a comment at `ReaderModal.vue:180` stating that
+- [x] 7.6 Done — the three layers (epub.js sandbox default, `allowScriptedContent: false`, CSP never
+      widening `script-src`) are documented at the call site, plus an epub.js entry in the README upgrade
+      notes, since layer one lives in the dependency. Original wording:
+      a comment at `ReaderModal.vue:180` stating that
       `allowScriptedContent: false` is load-bearing, plus an epub.js entry in the upgrade checklist.
       Flipping it, or an epub.js release that changes its iframe `sandbox` defaults, turns
       attacker-authored EPUB XHTML into same-origin script execution. See `docs/security-audit.html`
@@ -277,10 +282,12 @@ in depth. Ordered cheapest-win-first, not by severity.
       hold a bare MD5: those still authenticate and are **transparently upgraded on the next successful
       sync**, so nobody re-enters anything. `MIN_PASSWORD_LENGTH = 8` is enforced server-side — the old
       check was `empty()` here and 4 characters in the browser
-- [ ] 8.10 `IUserSession::setUser()` (`KoreaderController.php:221, 364`) — **not done.** It needs
-      `BookService` to take an explicit user rather than read the session in 11 places, which is a wider
-      change than the rest of this phase and was not worth risking alongside the credential rework.
-      Still the same item as `2.14b`
+- [x] 8.10 **Done.** Both `setUser()` calls gone. `BookService::runAs($userId, $callback)` sets an
+      explicit acting user for the duration of one call and unwinds it in a `finally`; `currentUserId()`
+      prefers it and falls back to the session. Only one call on the sync path ever needed a user
+      context (`getBooks()` inside auto-indexing) — everything else already passed the id explicitly.
+      Verified past the test suites, which use a hash that never matches and so never reach
+      auto-indexing: deleted a real hash mapping, sent a sync PUT with that hash, mapping recreated
 
 ### Low — mechanical
 
@@ -375,11 +382,15 @@ processed" was.
       !contains "error"`, which a 401 body (`{"message":"Unauthorized"}`) satisfies — so the test passes
       when auth is completely broken. Assert on HTTP status instead. It is why a broken credential
       surfaced as two unrelated-looking GET failures rather than an auth failure
-- [ ] 9.4 Add a `koreader:index` occ command (or reuse `koreader:generate-hashes`) to force-drain this
-      app's own pending rows, for admins debugging a stuck library and for the integration suite
-- [ ] 9.5 Minor: jobs for files deleted before cron ran log `"Skipping metadata extraction for a file
-      that is gone"` and no-op — observed live with `fileId 191`. Correct behaviour, but the delete
-      listener could drop the queued job with `IJobList::remove()` and keep the queue clean
+- [x] 9.4 `occ koreader:index` added — walks pending rows directly rather than the job queue, so it
+      also recovers books whose job was lost to a restore or a purge. `--user` and `--limit`; safe to
+      re-run. **It immediately caught a defect in `processPendingBooks()`**: it counted remaining rows
+      *after* extracting, reading a table the same request had just written — the exact "dirty table
+      reads" trap that forced extraction out of the listener in `2.24`. Count now happens up front and
+      the remainder is derived; the command does one pass per user rather than looping, for the same
+      reason. Confirmed zero assertions on a later run
+- [x] 9.5 The delete listener now calls `IJobList::remove()` for the file's `ExtractMetadataJob`.
+      Verified: upload queues one job, delete removes it (1 → 0)
 
 ---
 
