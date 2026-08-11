@@ -16,7 +16,7 @@
     <!-- No max-version on php on purpose: NC 34 already runs on 8.5 and pinning
          an upper bound would falsely block a future patch release. -->
     <php min-version="8.2" />
-    <nextcloud min-version="34" max-version="35" />
+    <nextcloud min-version="34" max-version="34" />
   </dependencies>
   <commands>
     <command>OCA\KoreaderCompanion\Command\GenerateBookHashesCommand</command>

@@ -76,7 +76,7 @@ import Upload from 'vue-material-design-icons/Upload.vue'
 import { extractMetadata, uploadBook } from '../api.js'
 
 // Mirrors BookService::SUPPORTED_EXTENSIONS.
-const EXTENSIONS = ['epub', 'pdf', 'cbr', 'cbz', 'mobi']
+const EXTENSIONS = ['epub', 'pdf', 'cbr', 'cbz']
 
 export default {
 	name: 'UploadModal',

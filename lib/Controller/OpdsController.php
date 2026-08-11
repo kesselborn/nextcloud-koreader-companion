@@ -328,7 +328,7 @@ class OpdsController extends Controller {
      * Thumbnail link, but only for formats that can actually produce one.
      *
      * Previously advertised unconditionally, so OPDS readers requested covers
-     * for PDF and MOBI and got an error back -- which clients render as a broken
+     * for PDF and got an error back -- which clients render as a broken
      * image rather than as "no cover". PDF is excluded because Nextcloud 34.0.2
      * disabled all ImageMagick-backed preview providers for security
      * (nextcloud/server#62802), not because of anything in this app.
@@ -351,7 +351,6 @@ class OpdsController extends Controller {
             'pdf' => 'application/pdf',
             'cbr' => 'application/comicbook+rar',
             'cbz' => 'application/comicbook+zip',
-            'mobi' => 'application/x-mobipocket-ebook',
             'txt' => 'text/plain'
         ];
         

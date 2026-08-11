@@ -22,7 +22,7 @@ class BookService {
      * binary. Keep this list as the single source of truth; it used to be
      * duplicated in four places, and the listeners had their own copies.
      */
-    public const SUPPORTED_EXTENSIONS = ['epub', 'pdf', 'cbr', 'cbz', 'mobi'];
+    public const SUPPORTED_EXTENSIONS = ['epub', 'pdf', 'cbr', 'cbz'];
 
     /** Comic archives, handled by the same metadata path. */
     public const COMIC_EXTENSIONS = ['cbr', 'cbz'];
@@ -609,8 +609,6 @@ class BookService {
                 // ZipArchive for cbz. Only cbr needs the optional dependency,
                 // and that path degrades on its own.
                 $this->extractComicMetadata($file, $metadata, $extension);
-            } elseif ($extension === 'mobi') {
-                $this->extractMobiMetadata($file, $metadata);
             }
         }
 
@@ -650,8 +648,6 @@ class BookService {
                 $this->extractPdfMetadata($file, $metadata);
             } elseif (in_array($extension, self::COMIC_EXTENSIONS, true)) {
                 $this->extractComicMetadata($file, $metadata, $extension);
-            } elseif ($extension === 'mobi') {
-                $this->extractMobiMetadata($file, $metadata);
             }
         } catch (\Exception $e) {
             // If extraction fails, keep the filename-based defaults
@@ -1082,58 +1078,6 @@ class BookService {
         }
     }
 
-    private function extractMobiMetadata(Node $file, &$metadata) {
-        try {
-            $filename = pathinfo($file->getName(), PATHINFO_FILENAME);
-            $metadata['title'] = $filename;
-            $metadata['format'] = 'mobi';
-            
-            // Basic MOBI metadata extraction from filename patterns
-            // Pattern: "Title - Author"
-            if (strpos($filename, ' - ') !== false) {
-                $parts = explode(' - ', $filename, 2);
-                $metadata['title'] = trim($parts[0]);
-                $metadata['author'] = trim($parts[1]);
-            }
-            // Pattern: "Author - Title"
-            elseif (preg_match('/^(.+?)\s-\s(.+)$/', $filename, $matches)) {
-                $metadata['author'] = trim($matches[1]);
-                $metadata['title'] = trim($matches[2]);
-            }
-            
-            // Try to extract MOBI file header metadata
-            $this->extractMobiHeader($file, $metadata);
-            
-        } catch (\Exception $e) {
-            $this->logger->error('MOBI metadata extraction failed', ['exception' => $e]);
-        }
-    }
-
-    private function extractMobiHeader(Node $file, &$metadata) {
-        try {
-            // Read first 1KB of MOBI file to check header
-            $content = $file->fopen('r');
-            if (!$content) {
-                return;
-            }
-            
-            $header = fread($content, 1024);
-            fclose($content);
-            
-            // MOBI files have "BOOKMOBI" or "TPZ" magic bytes at offset 60
-            if (substr($header, 60, 8) === 'BOOKMOBI' || substr($header, 60, 3) === 'TPZ') {
-                $metadata['format'] = 'mobi';
-                
-                // Basic validation that it's a real MOBI file
-                // Full MOBI parsing would require a dedicated library
-                // For now, we'll rely on filename-based extraction
-            }
-            
-        } catch (\Exception $e) {
-            // If header reading fails, keep filename-based metadata
-            $this->logger->error('MOBI header reading failed', ['exception' => $e]);
-        }
-    }
 
     public function searchBooks($query, $page = null, $perPage = null, $skipMetadataUpdate = false) {
         // If pagination parameters are provided, use database-based search
@@ -1269,7 +1213,6 @@ class BookService {
     }
 
 
-
     public function getBookById($id) {
         $allBooks = $this->getBooks();
         
@@ -1318,9 +1261,8 @@ class BookService {
      * /core/preview with ordinary session auth. This endpoint stays because OPDS
      * clients want a thumbnail link.
      *
-     * PDF and MOBI have no provider: PDF because Nextcloud 34.0.2 disabled all
-     * ImageMagick-backed providers for security (nextcloud/server#62802), MOBI
-     * because nothing here can read its cover. Both yield 404, not 501, so
+     * PDF has no provider: PDF because Nextcloud 34.0.2 disabled all
+     * ImageMagick-backed providers for security (nextcloud/server#62802). It yields 404, not 501, so
      * clients treat it as "no cover" rather than "server broken".
      */
     public function getThumbnail($book) {
@@ -1499,7 +1441,6 @@ class BookService {
             'epub' => 'application/epub+zip',
             'pdf' => 'application/pdf',
             'cbr' => 'application/vnd.comicbook-rar',
-            'mobi' => 'application/x-mobipocket-ebook',
             'txt' => 'text/plain'
         ];
         
