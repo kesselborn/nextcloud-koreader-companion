@@ -109,6 +109,7 @@ OC.L10N.register(
         "Some files were skipped: unsupported format": "Einige Dateien wurden übersprungen: nicht unterstütztes Format",
         "Sort by author": "Nach Autor sortieren",
         "Sort by date added": "Nach Hinzugefügt-Datum sortieren",
+        "Sort by last updated": "Sort by last updated",
         "Sort by publication date": "Nach Erscheinungsdatum sortieren",
         "Sort by title": "Nach Titel sortieren",
         "Sort order": "Sortierung",

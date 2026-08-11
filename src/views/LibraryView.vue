@@ -146,6 +146,7 @@ export default {
 				{ value: 'title', label: t('koreader_companion', 'Sort by title') },
 				{ value: 'author', label: t('koreader_companion', 'Sort by author') },
 				{ value: 'recent', label: t('koreader_companion', 'Sort by date added') },
+				{ value: 'updated', label: t('koreader_companion', 'Sort by last updated') },
 				{ value: 'publication_date', label: t('koreader_companion', 'Sort by publication date') },
 			]
 		},

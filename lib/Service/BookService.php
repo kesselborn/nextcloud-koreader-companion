@@ -163,8 +163,10 @@ class BookService {
         // Now query database for paginated results
         try {
             $qb = $this->db->getQueryBuilder();
+            // Aliased 'm' because the "last updated" sort correlates a subquery
+            // against this table.
             $qb->select('*')
-               ->from('koreader_metadata')
+               ->from('koreader_metadata', 'm')
                ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
                ->setFirstResult($offset)
                ->setMaxResults($perPage);
@@ -204,6 +206,25 @@ class BookService {
         switch ($sort) {
             case 'recent':
                 $qb->orderBy('created_at', 'DESC');
+                break;
+            case 'updated':
+                // "Last updated" means the book *or* its reading progress, so this
+                // reaches through the hash mappings into the sync table and takes
+                // whichever is newer. A correlated subquery rather than a join, so
+                // it cannot multiply rows when a book has several document hashes
+                // (binary and filename) or several devices reporting.
+                //
+                // Identifiers are deliberately unquoted: createFunction() passes
+                // raw SQL straight through without translating quoting, and
+                // backticks would break PostgreSQL.
+                $qb->orderBy($qb->createFunction(
+                    'COALESCE('
+                    . '(SELECT MAX(p.updated_at) FROM *PREFIX*koreader_sync_progress p'
+                    . ' INNER JOIN *PREFIX*koreader_hash_mapping h'
+                    . ' ON h.document_hash = p.document_hash AND h.user_id = p.user_id'
+                    . ' WHERE h.metadata_id = m.id),'
+                    . ' m.updated_at)'
+                ), 'DESC');
                 break;
             case 'author':
                 $qb->orderBy('author', 'ASC')->addOrderBy('title', 'ASC');
@@ -1323,7 +1344,7 @@ class BookService {
         try {
             $qb = $this->db->getQueryBuilder();
             $qb->select('*')
-               ->from('koreader_metadata')
+               ->from('koreader_metadata', 'm')
                ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
 
             // Add search conditions
