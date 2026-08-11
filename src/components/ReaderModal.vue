@@ -440,7 +440,50 @@ export default {
 				this.percent = Math.round(this.epub.locations.percentageFromCfi(cfi) * 100)
 				this.updatePage(cfi)
 			}
-			this.chapter = this.epub.navigation?.get(location.start.href)?.label?.trim() || ''
+			this.chapter = this.chapterNameFor(location.start.href)
+		},
+
+		/**
+		 * Which chapter the reader is in.
+		 *
+		 * navigation.get() is an exact href lookup, and it misses constantly: TOC
+		 * entries usually carry a fragment (`part0018.html#c15`) while the rendered
+		 * location does not, so the header simply stayed blank. Match on the path
+		 * alone, walking nested TOC entries, and fall back to the heading in the
+		 * page itself -- which is what a reader would call the chapter anyway.
+		 */
+		chapterNameFor(href) {
+			const base = (href || '').split('#')[0]
+
+			const search = (items) => {
+				for (const item of items || []) {
+					if ((item.href || '').split('#')[0] === base) {
+						return item.label
+					}
+					const nested = search(item.subitems)
+					if (nested) {
+						return nested
+					}
+				}
+				return null
+			}
+
+			const fromToc = search(this.epub?.navigation?.toc)
+			if (fromToc?.trim()) {
+				return fromToc.trim()
+			}
+
+			try {
+				const doc = this.rendition?.getContents()?.[0]?.document
+				const heading = doc?.querySelector('h1, h2')?.textContent?.trim()
+				if (heading) {
+					return heading.replace(/\s+/g, ' ')
+				}
+			} catch (error) {
+				// Falls through to no chapter name, which is only cosmetic.
+			}
+
+			return ''
 		},
 
 		/**
