@@ -414,6 +414,12 @@ processed" was.
       a press untouched (`processed:0`), so re-extraction can no longer discard what the user typed
 - [ ] V6 Still unproven: `8.5` upload validation, `8.6` folder validation and `8.11` header escaping
       have no test coverage — they were verified by reading, not by running. Needs `8.8b`/`4.12`
+- [x] V7b **Re-measured on a real library** (246 books, 329 MB, supplied rather than synthesised):
+      feed unchanged within noise (0.78 → 0.75s), single download **0.93 → 0.80s, about 13%** — roughly
+      double the synthetic gain, in the predicted direction, but still not an order of magnitude. The
+      fix earns its place because the cost no longer scales with library size, not because of today's
+      wall-clock number. Also confirmed on this library: 246 books, **0 pending** — the cron sidecar
+      extracted every one unattended
 - [x] V7 **`8.2b` benchmarked, and the win is smaller than the audit claimed.** 307 books, measured
       against the pre-fix commit by checking it out (the repo is bind-mounted, so the container picks
       it up live): OPDS feed unchanged within noise (~0.75s either way), single download ~0.84s → ~0.79s,

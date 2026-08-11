@@ -225,14 +225,20 @@
   plus  the metadata-revert bug, and an "Extract metadata now" button</code></pre>
     <p class="note">
       <strong>Honest correction on H1b.</strong> The structural claim holds &mdash; a download no longer
-      costs work proportional to the library &mdash; but the measured win is far smaller than the
-      finding below implies, and the finding overstated the mechanism. Benchmarked at 307 books against
-      the pre-fix commit: the OPDS feed was unchanged within noise (~0.75s either way) and a single
-      download went from ~0.84s to ~0.79s, about 6%. Two reasons. The fixtures were 300 copies of one
-      small EPUB, so per-file parsing was cheap; real multi-megabyte books should widen the gap, but
-      <em>that is not demonstrated here</em>. And the reconciliation walk already skipped unchanged
-      files, so it was re-walking the directory tree on every request, not re-parsing every book as
-      H1b claims below.
+      costs work proportional to the library &mdash; but the measured win is smaller than the finding
+      below implies, and the finding overstated the mechanism. Measured twice against the pre-fix
+      commit, on the same running instance:
+      </p>
+      <pre><code>                        feed          single download
+307 identical fixtures  0.78 &rarr; 0.75s   0.84 &rarr; 0.79s   (~6%)
+<b>246 real books, 329 MB   0.78 &rarr; 0.75s   0.93 &rarr; 0.80s   (~13%)</b></code></pre>
+      <p class="note">
+      Real books roughly double the download gain, which is the direction predicted &mdash; per-file
+      parsing costs more when the files are not 300 copies of one small EPUB &mdash; but it is still
+      13%, not an order of magnitude. Feed timings are unchanged within noise in both runs. And the
+      reconciliation walk already skipped unchanged files, so it was re-walking the directory tree on
+      every request, not re-parsing every book as H1b claims below. The fix is worth having because the
+      cost no longer scales with the library, not because of the wall-clock number today.
     </p>
     <p class="note">
       <strong>Verified on a live Nextcloud 34.0.2.</strong> OPDS 29/29 and KOReader 13/13. The M1
