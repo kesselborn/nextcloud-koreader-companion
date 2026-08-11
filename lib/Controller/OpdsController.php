@@ -4,6 +4,8 @@ namespace OCA\KoreaderCompanion\Controller;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Http\XMLResponse;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -22,6 +24,9 @@ class OpdsController extends Controller {
     private $userSession;
     private $throttler;
     private $urlGenerator;
+
+    /** Set when core reported the caller is already being delayed. */
+    private bool $throttled = false;
 
     public function __construct(IRequest $request, $appName, BookService $bookService, IUserSession $userSession, IThrottler $throttler, IURLGenerator $urlGenerator) {
         parent::__construct($appName, $request);
@@ -43,7 +48,13 @@ class OpdsController extends Controller {
             return false;
         }
 
-        $credentials = base64_decode(substr($authHeader, 6));
+        // Strict: a malformed header should fail, not decode to garbage that then
+        // fails a login attempt and burns a throttle slot.
+        $credentials = base64_decode(substr($authHeader, 6), true);
+        if ($credentials === false) {
+            return false;
+        }
+
         $parts = explode(':', $credentials, 2);
 
         if (count($parts) !== 2) {
@@ -63,18 +74,46 @@ class OpdsController extends Controller {
         } catch (\OCP\Authentication\Exceptions\PasswordLoginForbiddenException $ex) {
             return false;
         } catch (\OCP\Security\Bruteforce\MaxDelayReached $ex) {
+            // Distinguished from a wrong password on purpose. Collapsing it into a
+            // 401 told a throttled client to keep trying, and meant the app never
+            // surfaced that the platform had started delaying it.
+            $this->throttled = true;
             return false;
         }
+    }
+
+    /**
+     * The single auth gate for every OPDS endpoint.
+     *
+     * @return DataResponse|null The response to send, or null when authenticated.
+     */
+    private function requireBasicAuth(): ?DataResponse {
+        if ($this->authenticateBasicAuth()) {
+            return null;
+        }
+
+        if ($this->throttled) {
+            return new DataResponse(['error' => 'Too many requests'], Http::STATUS_TOO_MANY_REQUESTS);
+        }
+
+        // Registers the failure with the brute-force throttler. Previously nothing
+        // here did: core's logClientIn() applied its own delay, but the app added
+        // no attempt of its own and the endpoints carried no protection attribute.
+        $response = new DataResponse(['error' => 'Unauthorized'], 401);
+        $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
+        $response->throttle(['action' => 'koreader_opds']);
+
+        return $response;
     }
 
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function index() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $page = max(1, (int)$this->request->getParam('page', 1));
@@ -99,11 +138,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function opensearch() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $searchUrl = $this->getSearchUrl();
@@ -127,11 +166,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function search() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $query = $this->request->getParam('q', '');
@@ -157,11 +196,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function download($id, $format) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $book = $this->bookService->getBookById($id);
@@ -176,11 +215,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function thumbnail($id) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $book = $this->bookService->getBookById($id);
@@ -543,11 +582,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function authors() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $page = max(1, (int)$this->request->getParam('page', 1));
@@ -571,11 +610,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function authorBooks($author) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $author = urldecode($author);
@@ -591,7 +630,7 @@ class OpdsController extends Controller {
             return $validationResponse;
         }
         
-        $title = "Books by " . htmlspecialchars($author);
+        $title = "Books by " . $author;
         $xml = $this->generatePaginatedOpdsXml($books, $page, $perPage, $totalCount, $title);
         
         $response = new XMLResponse($xml);
@@ -602,11 +641,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function series() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $page = max(1, (int)$this->request->getParam('page', 1));
@@ -630,11 +669,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function seriesBooks($seriesName) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $seriesName = urldecode($seriesName);
@@ -649,7 +688,7 @@ class OpdsController extends Controller {
             return $validationResponse;
         }
         
-        $title = "Series: " . htmlspecialchars($seriesName);
+        $title = "Series: " . $seriesName;
         $xml = $this->generatePaginatedOpdsXml($books, $page, $perPage, $totalCount, $title);
         
         $response = new XMLResponse($xml);
@@ -660,11 +699,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function genres() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $page = max(1, (int)$this->request->getParam('page', 1));
@@ -688,11 +727,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function genreBooks($genre) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $genre = urldecode($genre);
@@ -708,7 +747,7 @@ class OpdsController extends Controller {
             return $validationResponse;
         }
         
-        $title = "Genre: " . htmlspecialchars($genre);
+        $title = "Genre: " . $genre;
         $xml = $this->generatePaginatedOpdsXml($books, $page, $perPage, $totalCount, $title);
         
         $response = new XMLResponse($xml);
@@ -719,11 +758,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function formats() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $page = max(1, (int)$this->request->getParam('page', 1));
@@ -747,11 +786,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function formatBooks($format) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $format = urldecode($format);
@@ -767,7 +806,7 @@ class OpdsController extends Controller {
             return $validationResponse;
         }
         
-        $title = "Format: " . strtoupper(htmlspecialchars($format));
+        $title = "Format: " . strtoupper($format);
         $xml = $this->generatePaginatedOpdsXml($books, $page, $perPage, $totalCount, $title);
         
         $response = new XMLResponse($xml);
@@ -778,11 +817,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function languages() {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $page = max(1, (int)$this->request->getParam('page', 1));
@@ -806,11 +845,11 @@ class OpdsController extends Controller {
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[PublicPage]
+    #[BruteForceProtection(action: 'koreader_opds')]
     public function languageBooks($language) {
-        if (!$this->authenticateBasicAuth()) {
-            $response = new DataResponse(['error' => 'Unauthorized'], 401);
-            $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-            return $response;
+        $denied = $this->requireBasicAuth();
+        if ($denied !== null) {
+            return $denied;
         }
         
         $language = urldecode($language);
@@ -826,7 +865,7 @@ class OpdsController extends Controller {
             return $validationResponse;
         }
         
-        $title = "Language: " . htmlspecialchars($language);
+        $title = "Language: " . $language;
         $xml = $this->generatePaginatedOpdsXml($books, $page, $perPage, $totalCount, $title);
         
         $response = new XMLResponse($xml);
