@@ -465,13 +465,40 @@ processed" was.
       identically. **Confirmed working from the reporter's own reader.**
       *Why no test caught it:* the suite sends `0.25`, which fits in 10 characters. Worth a case with
       full float precision — see `10.6`
-- [ ] 10.5 The sort control and search field still do not line up, and have different heights.
-      `align-items: flex-end` on the toolbar was not enough — the select's root appears to extend below
-      its visible box. **Do not guess at this again**: measure the rendered boxes first (the page needs a
-      session, so a logged-in DevTools console is the quickest route), then fix against the numbers
 - [ ] 10.6 Add a KOReader test case that sends full float precision (e.g. `0.6333333333333333`) and a
       long device name. Both would have caught `10.4`; the current fixtures are short enough to fit any
       column
+- [x] 10.7 **Reading progress from a device never reached the UI, part two.** After `10.4` fixed
+      storage, `tryAutoIndex()` still called `getBooks()`, which parses every file in the library and
+      only used the file ids. On a real library that re-parsed every PDF per sync with an unknown hash,
+      and smalot/pdfparser exhausted the 512 MB limit — a fatal, so HTTP 500, repeatable by anyone with
+      sync credentials. **The `AUTO_INDEX_MAX_FILES` bound from `8.2a` never helped**: it sliced the
+      result *after* `getBooks()` had done the work. Bound is now in SQL, candidates come from the
+      metadata table, newest first. Fatal → 200 in under 3s on 246 books
+- [x] 10.8 **PDF content parsing removed** (requested). Same OOM as `10.7`: kiwilan wraps
+      smalot/pdfparser and retains decoded image content, so a 20 MB PDF killed a worker while 56 MB
+      ones in the same library parsed fine — file size is not a usable guard, and the fatal left the
+      book `pending` forever with the job dying on every retry. Metadata now comes from the filename,
+      and coverless books get a proper placeholder icon rather than bare text. `PdfMetadataExtractor`
+      226 → 101 lines
+- [ ] 10.9 **Filename parsing assumes `Author - Title`, but Calibre exports `Title - Author`.** Now
+      visible on PDFs since `10.8`: `Gregs Tagebuch 17 - Voll aufgedreht! - Jeff Kinney.pdf` becomes
+      title `Voll aufgedreht! - Jeff Kinney`, author `Gregs Tagebuch 17`. The app's own auto-rename
+      writes `Author - Title`, so the two conventions genuinely conflict and neither is guessable from
+      the name alone. A Calibre layout is detectable from the path
+      (`…/Calibre Library/<Author>/<Title> (id)/`) — needs a decision, not a guess
+- [x] 10.5 Toolbar alignment — **fixed, measured in a real browser.** NcTextField ships
+      `margin-block-start: 6px` and NcSelect `margin-block-end: 4px`, so `align-items: center` aligned
+      their *margin* boxes; heights differed (34 vs 36) because the select adds its border on top of the
+      same `--default-clickable-area`. Every reset of mine tied the components' own scoped selectors on
+      specificity and their stylesheets load later, so it silently lost — nesting under
+      `.library__toolbar` wins. Pinning `height` then starved the select's content (client 32 vs scroll
+      34) and its `overflow-y: auto` rendered a scrollbar; `min-height: 36` fits. The toolbar also
+      reserves the width of Nextcloud's floating nav toggle, which was clipping the search field.
+      Verified both `top 66, height 36`, deltas 0, `scrollHeight == clientHeight`
+- [x] 10.10 Search clear (✕) reset the model but never re-ran the query, so stale results stayed and the
+      pending debounce then re-searched the text just cleared
+- [x] 10.11 Sort by "last updated", counting the newest reading-progress push, and made the default
 - [x] 10.3 Author names on cards are clickable, titled "Search for books of this author", and fill the
       search box and run the search. A real `<button>` styled back down to look like text, so it is
       keyboard-reachable and announced as an action. Uses the same query a user could type rather than a
