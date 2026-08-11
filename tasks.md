@@ -198,7 +198,10 @@ Undocumented until now: this shipped as working-tree changes with no task coveri
 - [x] 7.3 CSP widened in `PageController::index()` — `blob:` added to frame/style/font/image/media so
       epub.js can hand unpacked chapters to its iframe. **`script-src` deliberately untouched**
 - [x] 7.4 Reading position and font size persisted in `localStorage`, keyed by book id
-- [ ] 7.5 Commit this work — it is still uncommitted, alongside the rebuilt `js/`/`css/` bundles
+- [x] 7.5 Committed, in a 7-commit signed stack alongside the Phase 8/9 work. Note the reader could not
+      be separated from the extraction button: both touch `PageController.php`, `BookService.php` and
+      `routes.php`, and by the time they were committed the split was only possible per file. They share
+      one commit, which says so
 - [ ] 7.6 Pin the security assumption in code: a comment at `ReaderModal.vue:180` stating that
       `allowScriptedContent: false` is load-bearing, plus an epub.js entry in the upgrade checklist.
       Flipping it, or an epub.js release that changes its iframe `sandbox` defaults, turns
