@@ -236,12 +236,13 @@ in depth. Ordered cheapest-win-first, not by severity.
 
 ### The gate
 
-- [~] 8.2 **H1 — remote resource amplification.** Partially closed.
+- [x] 8.2 **H1 — remote resource amplification.** Closed, except 8.2c (batchRename → IJobList,
+      rate-limited as a stopgap).
       (a) **done** — `tryAutoIndex()` now stops after `AUTO_INDEX_MAX_FILES` (200). KOReader retries, so
       a document past the bound is still found across a few syncs, and `koreader:generate-hashes` maps
       the rest up front;
-      (b) **not done** — listings still re-scan and re-parse the folder on every request, and
-      `getBookById()` is still an O(library) scan. Serving from `oc_koreader_metadata` and looking up by
+      (b) **done** — `getBookById()` is an indexed SQL lookup and the reconciliation walk is
+      throttled to once per 5 min per user (see V7/V7b for the measured effect). Serving from `oc_koreader_metadata` and looking up by
       id in SQL is a real refactor of `getBooks()`/`scanFolder()`, deliberately not attempted in the same
       pass as the security fixes. **This is the remaining half of the deployment gate**;
       (c) **deferred** — `batchRename` still runs in-request; moving it to `IJobList` is its own change.
@@ -354,12 +355,12 @@ file_id 199  done     "Brave New World"                  author: Aldous Huxley
 So the app is fine and the harness is not — which is exactly what "it doesn't look like it gets
 processed" was.
 
-- [ ] 9.1 Add a cron sidecar to `compose.yaml` so queued jobs drain in dev. Without it every
+- [x] 9.1 Add a cron sidecar to `compose.yaml` so queued jobs drain in dev. Without it every
       folder-drop upload stays `pending` indefinitely and the pending-state UI looks like a bug in the
       app. Mode is already `cron` (`config:app:get core backgroundjobs_mode`), so nothing else changes
-- [ ] 9.2 Add `make cron` (one drain) and have `dev/seed.sh` drain after seeding — otherwise freshly
+- [x] 9.2 Add `make cron` (one drain) and have `dev/seed.sh` drain after seeding — otherwise freshly
       seeded fixtures show filename-derived titles until someone thinks to run the worker by hand
-- [ ] 9.3 Document the requirement in `README.md`: **without working cron, metadata extraction never
+- [x] 9.3 Document the requirement in `README.md`: **without working cron, metadata extraction never
       happens for files that arrive outside the web-UI upload form.** Note the latency contract too —
       with stock 5-minute cron, a folder-drop shows a filename-derived title for up to 5 minutes. For
       low latency, `occ background-job:worker` as a long-running service is the supported answer
@@ -381,7 +382,7 @@ processed" was.
       provisioning claimed the password was `test123` while the old one stayed in place. Fixed by
       deleting the key first, checking the exit code, and asserting the value round-trips. This is what
       made V1 look like a Phase 8 regression
-- [ ] 9.8 Tighten `test_koreader.sh`: `PUT progress update` asserts `contains "message" &&
+- [x] 9.8 Tighten `test_koreader.sh`: `PUT progress update` asserts `contains "message" &&
       !contains "error"`, which a 401 body (`{"message":"Unauthorized"}`) satisfies — so the test passes
       when auth is completely broken. Assert on HTTP status instead. It is why a broken credential
       surfaced as two unrelated-looking GET failures rather than an auth failure
