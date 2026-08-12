@@ -93,6 +93,18 @@ function elementsNamed(parent, name) {
 	return Array.from(parent.children).filter((el) => el.localName.toLowerCase() === name)
 }
 
+/**
+ * A path step, indexed the way crengine's toStringV2() indexes it.
+ *
+ * The index appears only when the parent has more than one child of that name:
+ * `div` when it is the only div, `h1[1]` when there are two h1s. Emitting an
+ * index unconditionally is what toStringV1() did, and while a parser accepts
+ * both, matching what current devices actually write costs nothing.
+ */
+function step(name, index, siblingCount) {
+	return siblingCount > 1 ? `${name}[${index}]` : name
+}
+
 /** Direct text-node children, which is what KOReader's text() indexes. */
 function textNodesOf(element) {
 	return Array.from(element.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE)
@@ -130,13 +142,25 @@ export function resolvePointerInDocument(doc, parsed) {
 	const texts = textNodesOf(current)
 	const textNode = texts[parsed.textNodeIndex - 1]
 
-	if (!textNode) {
-		// The element exists but has no matching text node -- markup differences
-		// between CoolReader's DOM and the raw XHTML. The element is close enough.
+	// The device counted its offset across the whole block, because its DOM may
+	// have merged the inline markup this one still has. Walk this block's text
+	// nodes the same way rather than trusting one node's length.
+	if (!textNode || parsed.offset > textNode.length) {
+		const walker = doc.createTreeWalker(current, NodeFilter.SHOW_TEXT)
+		let remaining = parsed.offset
+
+		while (walker.nextNode()) {
+			if (remaining <= walker.currentNode.length) {
+				return { node: walker.currentNode, offset: remaining }
+			}
+			remaining -= walker.currentNode.length
+		}
+
+		// Past the end, or no text at all: the element itself is close enough.
 		return { node: current, offset: 0 }
 	}
 
-	return { node: textNode, offset: Math.min(parsed.offset, textNode.length) }
+	return { node: textNode, offset: parsed.offset }
 }
 
 /**
@@ -211,12 +235,7 @@ function pathFromNode(element) {
 		}
 
 		const siblings = elementsNamed(parent, name)
-		const index = siblings.indexOf(current) + 1
-		// Always indexed. Real devices emit both shapes -- `/body/div/p[28]` but
-		// also `/body/div/h1[1]/span[1]` -- so neither is "the" convention, and an
-		// explicit index is the unambiguous one: a bare step is a node *set* in
-		// XPath, and which member a parser picks is its own business.
-		steps.unshift(`${name}[${index}]`)
+		steps.unshift(step(name, siblings.indexOf(current) + 1, siblings.length))
 		current = parent
 	}
 
@@ -243,27 +262,32 @@ export function cfiToKoreaderPointer(book, contents, cfi) {
 			return null
 		}
 
-		let node = range.startContainer
-		let offset = range.startOffset
-		let textNodeIndex = 1
-
-		if (node.nodeType === Node.TEXT_NODE) {
-			const parent = node.parentNode
-			textNodeIndex = textNodesOf(parent).indexOf(node) + 1
-			node = parent
-		} else {
-			// A CFI can land on an element; treat it as the start of its first text.
-			offset = 0
-		}
-
-		const path = pathFromNode(node)
-		if (!path) {
-			return null
-		}
-
+		const node = range.startContainer
 		const fragment = section.index + DOC_FRAGMENT_BASE
 
-		return `/body/DocFragment[${fragment}]${path}/text()[${textNodeIndex}].${offset}`
+		// crengine appends `.N` as an offset *into the addressed node*, so the node
+		// has to be the text node the position is actually in. Anchoring at the
+		// enclosing block and counting characters across it -- which looks more
+		// robust -- produces an offset that does not belong to the node named in the
+		// path, and a device resolving it lands somewhere else entirely.
+		if (node.nodeType === Node.TEXT_NODE) {
+			const parent = node.parentNode
+			const texts = textNodesOf(parent)
+			const path = pathFromNode(parent)
+			if (!path) {
+				return null
+			}
+
+			const textStep = step('text()', texts.indexOf(node) + 1, texts.length)
+
+			return `/body/DocFragment[${fragment}]${path}/${textStep}.${range.startOffset}`
+		}
+
+		// An element position carries no offset, which is how a device writes the
+		// start of a heading: /body/DocFragment[22]/body/div/h1[1]/span[1]
+		const path = pathFromNode(node)
+
+		return path ? `/body/DocFragment[${fragment}]${path}` : null
 	} catch (error) {
 		return null
 	}
