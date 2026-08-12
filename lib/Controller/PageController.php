@@ -513,6 +513,30 @@ class PageController extends Controller {
     }
 
     /**
+     * The position currently stored for a book.
+     *
+     * The reader asks for this on open rather than trusting the copy embedded in
+     * the library listing: that listing is fetched once, so a device syncing
+     * afterwards leaves it stale, and the reader would resume from a position that
+     * has since been superseded.
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[UserRateLimit(limit: 120, period: 60)]
+    public function bookProgress($id) {
+        $user = $this->userSession->getUser();
+        if (!$user) {
+            return new JSONResponse(['error' => 'Not logged in'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        if (!is_numeric($id)) {
+            return new JSONResponse(['error' => 'Invalid book ID'], Http::STATUS_BAD_REQUEST);
+        }
+
+        return new JSONResponse(['progress' => $this->readingProgress->find($user->getUID(), (int)$id)]);
+    }
+
+    /**
      * Save a reading position from the in-browser reader.
      *
      * Writes to the same table KOReader devices sync against, keyed by the same

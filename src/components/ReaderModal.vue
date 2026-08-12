@@ -113,7 +113,7 @@ import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
 import FormatFontSizeDecrease from 'vue-material-design-icons/FormatFontSizeDecrease.vue'
 import FormatFontSizeIncrease from 'vue-material-design-icons/FormatFontSizeIncrease.vue'
 
-import { fetchBookFile, saveProgress } from '../api.js'
+import { fetchBookFile, fetchProgress, saveProgress } from '../api.js'
 import { cfiToKoreaderPointer, koreaderPointerToCfi } from '../koreaderPosition.js'
 
 // Where we left off, per book. Deliberately local: KOReader's own sync is
@@ -372,7 +372,17 @@ export default {
 		 */
 		async startingPosition() {
 			const local = localStorage.getItem(positionKey(this.book.id)) || undefined
-			const remote = this.book.progress
+
+			// Read from the server, not from the book handed over by the library.
+			// That listing is fetched once; a device syncing afterwards leaves it
+			// stale, and resuming from it silently ignores where you actually got to
+			// on the device. Falls back to the snapshot if the request fails.
+			let remote = this.book.progress
+			try {
+				remote = await fetchProgress(this.book.id) || remote
+			} catch (error) {
+				// Keep the snapshot; a stale position beats no position.
+			}
 
 			if (!remote?.progress_data) {
 				return local

@@ -42,6 +42,18 @@ export async function processPending() {
 }
 
 /**
+ * The position currently stored for a book.
+ *
+ * Asked for on open rather than reusing the copy in the library listing: that
+ * listing is fetched once, so a device syncing afterwards leaves it stale and the
+ * reader would resume from a position that has since been superseded.
+ */
+export async function fetchProgress(id) {
+	const { data } = await axios.get(url(`/books/${id}/progress`))
+	return data?.progress || null
+}
+
+/**
  * Save a reading position so devices can pick it up.
  *
  * `progress` must be a KOReader xpointer, not a CFI -- the sync table is shared

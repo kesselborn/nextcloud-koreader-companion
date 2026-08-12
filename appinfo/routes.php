@@ -9,6 +9,7 @@ return [
         ['name' => 'page#extractMetadata', 'url' => '/extract-metadata', 'verb' => 'POST'],
         ['name' => 'page#processPending', 'url' => '/books/process-pending', 'verb' => 'POST'],
         ['name' => 'page#bookFile', 'url' => '/books/{id}/file', 'verb' => 'GET'],
+        ['name' => 'page#bookProgress', 'url' => '/books/{id}/progress', 'verb' => 'GET'],
         ['name' => 'page#saveProgress', 'url' => '/books/{id}/progress', 'verb' => 'PUT'],
         ['name' => 'page#updateMetadata', 'url' => '/books/{id}/metadata', 'verb' => 'PUT'],
         ['name' => 'page#deleteBook', 'url' => '/books/{id}', 'verb' => 'DELETE'],

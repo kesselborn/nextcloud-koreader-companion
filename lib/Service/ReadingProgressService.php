@@ -117,6 +117,39 @@ class ReadingProgressService {
     }
 
     /**
+     * The position currently stored for a book, whoever wrote it.
+     *
+     * @return ?array{progress: string, percentage: float, device: string, updated_at: string}
+     */
+    public function find(string $userId, int $fileId): ?array {
+        $documentHash = $this->documentHashFor($userId, $fileId);
+        if ($documentHash === null) {
+            return null;
+        }
+
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select('progress', 'percentage', 'device', 'updated_at')
+            ->from('koreader_sync_progress')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('document_hash', $qb->createNamedParameter($documentHash)))
+            ->executeQuery();
+        $row = $result->fetch();
+        $result->closeCursor();
+
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            // Percent, matching what the book listing exposes.
+            'percentage' => (float)$row['percentage'] * 100,
+            'progress_data' => (string)$row['progress'],
+            'device' => (string)$row['device'],
+            'updated_at' => (string)$row['updated_at'],
+        ];
+    }
+
+    /**
      * The document hash a device would use for this file.
      *
      * Prefers an existing mapping so the browser and a device agree. If the book
