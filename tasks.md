@@ -535,6 +535,22 @@ processed" was.
 - [x] 11.10 Prompt copy rewritten to name the consequence rather than the mechanism: it says which
       device's position is being replaced, and the buttons say what they do ("Leave it unchanged" /
       "Continue here on my devices") instead of Save/Discard
+- [x] 11.11 **Found the authoritative format instead of reverse-engineering it.** KOReader's xpointers
+      are produced by crengine's `ldomXPointer::toStringV2()`
+      ([lvtinydom.cpp](https://github.com/koreader/crengine/blob/master/crengine/src/lvtinydom.cpp),
+      introduced in [koreader#5897](https://github.com/koreader/koreader/pull/5897),
+      `DOM_VERSION_WITH_NORMALIZED_XPOINTERS 20200223`). Two rules I had wrong:
+      **(a)** an index is emitted only when the parent has more than one child of that name — `div` but
+      `h1[1]` — where I emitted them unconditionally (that is `toStringV1` behaviour);
+      **(b)** the trailing `.N` is an offset *into the node the path addresses*, so anchoring at the
+      enclosing block and counting characters across it names one node while counting several. That
+      second one was a regression I introduced by reasoning about the format rather than reading it, and
+      it broke every paragraph containing inline markup.
+      Output is now shape-identical to a device's: `/body/DocFragment[22]/body/div/p[58]/text().155`
+      against Readest's `/body/DocFragment[10]/body/div/p[28]/text()[1].164`
+- [x] 11.12 Ruled out a `DocFragment` index shift: crengine notes indices can move for spines holding
+      non-XHTML items, because older versions only created fragments for `application/xhtml+xml`. This
+      book has 43 spine items, none of them anything else, so `DocFragment[N]` = spine item N−1 holds
 - [ ] 11.6 **Untested against real hardware.** The round trip is proven browser-to-browser and the format
       matches what Readest and kobo_clara emit, but no actual KOReader device has yet been asked to
       *consume* a position this app wrote. Worth one confirmation before trusting it with a real reading
