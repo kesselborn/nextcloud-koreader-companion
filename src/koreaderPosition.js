@@ -105,6 +105,30 @@ function step(name, index, siblingCount) {
 	return siblingCount > 1 ? `${name}[${index}]` : name
 }
 
+/**
+ * Elements a rendering engine keeps as structure rather than dissolving.
+ *
+ * Used only to find where a block starts; inline elements are unreliable to index
+ * across engines, but blocks are stable.
+ */
+const BLOCK_ELEMENTS = new Set([
+	'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote',
+	'td', 'th', 'section', 'article', 'aside', 'pre', 'figcaption', 'dd', 'dt', 'body',
+])
+
+function nearestBlockFor(node) {
+	let element = node.nodeType === Node.TEXT_NODE ? node.parentNode : node
+
+	while (element && element.nodeType === Node.ELEMENT_NODE) {
+		if (BLOCK_ELEMENTS.has(element.localName.toLowerCase())) {
+			return element
+		}
+		element = element.parentNode
+	}
+
+	return null
+}
+
 /** Direct text-node children, which is what KOReader's text() indexes. */
 function textNodesOf(element) {
 	return Array.from(element.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE)
@@ -276,6 +300,35 @@ export function cfiToKoreaderPointer(book, contents, cfi) {
 			const path = pathFromNode(parent)
 			if (!path) {
 				return null
+			}
+
+			// At the very start of a block, address the block's first child element
+			// rather than the text we happen to have landed in.
+			//
+			// All three shapes were tried against a real device, for the same
+			// position at the top of chapter 20:
+			//
+			//   .../h1[1]/span[1]           -> chapter 20   (what the device writes)
+			//   .../h1[1]/span[2]/text().0  -> chapter 19   (what we wrote)
+			//   .../h1[1]                   -> chapter 19
+			//
+			// The heading is `<h1><span id="page132"></span><span>CHAPTER 20</span></h1>`,
+			// so the engine's position for the top of a chapter is the first node
+			// inside the heading -- an empty page anchor -- while epub.js gives us the
+			// first *text*, one span later. Addressing the block itself is read as the
+			// position before it, which is the previous chapter.
+			if (range.startOffset === 0) {
+				const block = nearestBlockFor(node)
+				const first = block?.firstElementChild
+
+				if (first) {
+					const firstPath = pathFromNode(first)
+					if (firstPath) {
+						return `/body/DocFragment[${fragment}]${firstPath}`
+					}
+				}
+
+				return `/body/DocFragment[${fragment}]${path}`
 			}
 
 			const textStep = step('text()', texts.indexOf(node) + 1, texts.length)
