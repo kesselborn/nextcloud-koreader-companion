@@ -551,6 +551,31 @@ processed" was.
 - [x] 11.12 Ruled out a `DocFragment` index shift: crengine notes indices can move for spines holding
       non-XHTML items, because older versions only created fragments for `application/xhtml+xml`. This
       book has 43 spine items, none of them anything else, so `DocFragment[N]` = spine item N−1 holds
+- [x] 11.13 **Position format derived from the data and verified, replacing trial and error.** Six
+      device-written pointers across four books and two clients were resolved against the actual EPUBs,
+      then *regenerated* from the resolved node with our rules and compared byte-for-byte. 5 of 5
+      resolvable ones match exactly:
+
+      | book | device pointer | regenerated |
+      |---|---|---|
+      | A Scanner Darkly | `…/p[201]/text().185` | match |
+      | 2010: Odyssey Two | `…/p[407]/text().142` | match |
+      | Babylons Asche | `…/p[1]/span` | match |
+      | Born to Run | `…/h1[1]/span[1]` | match |
+      | Born to Run | `…/p[28]/text()[1].164` | match |
+
+      The confirmed rules: `DocFragment[N]` = spine item N−1; an element or `text()` index appears only
+      when the parent has more than one such child; the trailing `.N` is an offset **within the addressed
+      text node** (verified: 185 of 246, 142 of 198, 164 of 229 — all inside their node); and a position
+      at the start of a block is written as an element pointer at the block's **first child element**,
+      with no offset. That last one is what the off-by-one actually was — those first children are empty
+      page anchors (`<span id="page132"></span>`), which epub.js skips over to the first *text*
+- [ ] 11.14 **Known divergence, not fixable from the file alone.** The sixth pointer, written by a Kobo
+      (`/body/DocFragment[11]/body/div/p[3]/text().120` in *Magic for Beginners*), does not resolve
+      against the file: that book's `<body>` holds bare `<p>` children, and **no** spine item in it has
+      `body/div/p[3]`. So crengine's DOM contains a `<div>` the file does not — its own normalisation.
+      Any pointer we generate from the file's DOM will miss on such books, and vice versa. Detecting
+      this would mean emulating crengine's boxing rules
 - [ ] 11.6 **Untested against real hardware.** The round trip is proven browser-to-browser and the format
       matches what Readest and kobo_clara emit, but no actual KOReader device has yet been asked to
       *consume* a position this app wrote. Worth one confirmation before trusting it with a real reading
