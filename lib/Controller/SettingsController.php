@@ -74,6 +74,16 @@ class SettingsController extends Controller {
             $target = $userFolder->get($folder);
         } catch (\OCP\Files\NotFoundException $e) {
             return new JSONResponse(['error' => 'That folder does not exist'], 404);
+        } catch (\Throwable $e) {
+            // Not only NotFoundException: a path like '../../etc' fails validation
+            // deeper in the filesystem layer and threw straight past this handler,
+            // answering 500 instead of rejecting the input. Anything that cannot be
+            // resolved is a bad folder, whatever the layer calls it.
+            $this->logger->debug('Rejected an unusable library folder', [
+                'app' => $this->appName,
+                'exception' => $e,
+            ]);
+            return new JSONResponse(['error' => 'That folder cannot be used'], 400);
         }
 
         if ($target->getType() !== \OCP\Files\FileInfo::TYPE_FOLDER) {
