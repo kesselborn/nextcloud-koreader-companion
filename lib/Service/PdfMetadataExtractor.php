@@ -48,7 +48,37 @@ class PdfMetadataExtractor {
      */
     private function extractFromFilename(Node $file): array {
         $filename = pathinfo($file->getName(), PATHINFO_FILENAME);
-        
+
+        // "Title - Author" or "Author - Title"? The name alone cannot say, and the
+        // two conventions in play here disagree: this app's own auto-rename writes
+        // "Author - Title", while a Calibre library exports "Title - Author".
+        //
+        // The directory settles it. Calibre lays out
+        // <Author>/<Title> (id)/<Title> - <Author>.ext, so when the filename ends
+        // with the grandparent directory's name, that is the author -- and
+        // splitting from the right also keeps titles that themselves contain " - ",
+        // which the naive split mangled into the author field.
+        $libraryAuthor = $this->authorFromCalibreLayout($file);
+
+        // Calibre keeps the pre-conversion file alongside as "<name>.original.pdf",
+        // so the stem still carries a secondary extension that would defeat the
+        // match.
+        $stem = preg_replace('/\.original$/i', '', $filename);
+
+        if ($libraryAuthor !== null && str_ends_with($stem, ' - ' . $libraryAuthor)) {
+            return [
+                'title' => trim(substr($stem, 0, -strlen(' - ' . $libraryAuthor))),
+                'author' => $libraryAuthor,
+                'subject' => '',
+                'creator' => '',
+                'creation_date' => null,
+                'modification_date' => null,
+                'pages' => 0,
+                'language' => '',
+                'publisher' => '',
+            ];
+        }
+
         // Try to extract author and title from patterns like "Author - Title"
         if (strpos($filename, ' - ') !== false) {
             $parts = explode(' - ', $filename, 2);
@@ -84,6 +114,20 @@ class PdfMetadataExtractor {
     /**
      * Clean and sanitize string metadata
      */
+    /**
+     * The author a Calibre-style layout implies, or null if this is not one.
+     */
+    private function authorFromCalibreLayout(Node $file): ?string {
+        try {
+            $author = trim($file->getParent()->getParent()->getName());
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        // A library root or a bare folder is not an author.
+        return ($author === '' || $author === 'files' || str_contains($author, '/')) ? null : $author;
+    }
+
     private function cleanString(?string $value): string {
         if (empty($value)) {
             return '';
