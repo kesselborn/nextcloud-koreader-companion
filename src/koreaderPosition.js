@@ -212,11 +212,11 @@ function pathFromNode(element) {
 
 		const siblings = elementsNamed(parent, name)
 		const index = siblings.indexOf(current) + 1
-		// Omit [1], which is what real devices emit: a Readest position reads
-		// `/body/div/p[28]`, not `/body/div[1]/p[28]`. Standard XPath treats the two
-		// identically, but there is no reason to hand a device's parser a shape it
-		// never produces itself.
-		steps.unshift(index > 1 ? `${name}[${index}]` : name)
+		// Always indexed. Real devices emit both shapes -- `/body/div/p[28]` but
+		// also `/body/div/h1[1]/span[1]` -- so neither is "the" convention, and an
+		// explicit index is the unambiguous one: a bare step is a node *set* in
+		// XPath, and which member a parser picks is its own business.
+		steps.unshift(`${name}[${index}]`)
 		current = parent
 	}
 

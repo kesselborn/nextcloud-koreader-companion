@@ -339,8 +339,13 @@ export default {
 			try {
 				await saveProgress(this.book.id, {
 					progress: pointer,
-					// The sync protocol carries a fraction, not a percent.
-					percentage: this.percent / 100,
+					// Full precision, recomputed here rather than reusing the readout:
+					// this.percent is rounded to a whole percent for display, and on a
+					// 400-page book one percent is about four pages -- enough to land
+					// in the previous chapter when saving at a chapter boundary, which
+					// is exactly where people stop reading. The protocol carries a
+					// fraction, not a percent.
+					percentage: this.exactFraction(),
 					device: t('koreader_companion', 'Nextcloud Web'),
 				})
 				showSuccess(t('koreader_companion', 'Reading position saved'))
@@ -441,6 +446,22 @@ export default {
 				this.updatePage(cfi)
 			}
 			this.chapter = this.chapterNameFor(location.start.href)
+		},
+
+		/**
+		 * The current position as a 0..1 fraction, unrounded.
+		 */
+		exactFraction() {
+			try {
+				const exact = this.epub?.locations?.percentageFromCfi(this.currentCfi)
+				if (typeof exact === 'number' && !isNaN(exact)) {
+					return exact
+				}
+			} catch (error) {
+				// Falls back to the rounded readout below.
+			}
+
+			return this.percent / 100
 		},
 
 		/**
