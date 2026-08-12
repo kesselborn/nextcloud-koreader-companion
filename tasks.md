@@ -486,7 +486,7 @@ processed" was.
       book `pending` forever with the job dying on every retry. Metadata now comes from the filename,
       and coverless books get a proper placeholder icon rather than bare text. `PdfMetadataExtractor`
       226 → 101 lines
-- [ ] 10.9 **Filename parsing assumes `Author - Title`, but Calibre exports `Title - Author`.** Now
+- [x] 10.9 **Filename parsing assumes `Author - Title`, but Calibre exports `Title - Author`.** Now
       visible on PDFs since `10.8`: `Gregs Tagebuch 17 - Voll aufgedreht! - Jeff Kinney.pdf` becomes
       title `Voll aufgedreht! - Jeff Kinney`, author `Gregs Tagebuch 17`. The app's own auto-rename
       writes `Author - Title`, so the two conventions genuinely conflict and neither is guessable from
