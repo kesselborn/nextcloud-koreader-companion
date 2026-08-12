@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="4"
+    resolveFromConfigFile="true"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="false"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+    errorBaseline="tests/psalm-baseline.xml"
+>
+    <projectFiles>
+        <directory name="lib" />
+        <ignoreFiles>
+            <directory name="vendor" />
+        </ignoreFiles>
+    </projectFiles>
+
+    <!--
+        Nextcloud's own classes are not installed as a dependency here: the server
+        provides them at runtime. Without stubs psalm reports every OCP\ class as
+        undefined, which drowns out anything real, so they are treated as unknown
+        rather than as errors.
+    -->
+    <issueHandlers>
+        <UndefinedClass>
+            <errorLevel type="suppress">
+                <referencedClass name="OC*" />
+                <referencedClass name="Psr\*" />
+                <referencedClass name="Symfony\*" />
+            </errorLevel>
+        </UndefinedClass>
+        <UndefinedDocblockClass>
+            <errorLevel type="suppress">
+                <referencedClass name="OC*" />
+            </errorLevel>
+        </UndefinedDocblockClass>
+    </issueHandlers>
+</psalm>

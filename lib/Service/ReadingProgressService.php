@@ -119,7 +119,7 @@ class ReadingProgressService {
     /**
      * The position currently stored for a book, whoever wrote it.
      *
-     * @return ?array{progress: string, percentage: float, device: string, updated_at: string}
+     * @return ?array{progress_data: string, percentage: float, device: string, updated_at: string}
      */
     public function find(string $userId, int $fileId): ?array {
         $documentHash = $this->documentHashFor($userId, $fileId);
@@ -142,7 +142,7 @@ class ReadingProgressService {
 
         return [
             // Percent, matching what the book listing exposes.
-            'percentage' => (float)$row['percentage'] * 100,
+            'percentage' => (float)$row['percentage'] * 100.0,
             'progress_data' => (string)$row['progress'],
             'device' => (string)$row['device'],
             'updated_at' => (string)$row['updated_at'],

@@ -17,5 +17,8 @@
         "psr-4": {
             "OCA\\KoreaderCompanion\\": "lib/"
         }
+    },
+    "require-dev": {
+        "vimeo/psalm": "^6.16"
     }
 }

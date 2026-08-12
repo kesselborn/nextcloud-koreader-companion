@@ -44,6 +44,25 @@ jobs:
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist
 
+  static-analysis:
+    name: Psalm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - run: composer install --no-progress --prefer-dist
+
+      # Baselined rather than clean: the existing findings are mostly missing
+      # types, and failing the build on them would just mean nobody adds the check.
+      # What matters is that the baseline cannot grow -- a new error fails here.
+      - name: Psalm
+        run: ./vendor/bin/psalm --no-progress --output-format=github
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest

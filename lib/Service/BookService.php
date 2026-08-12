@@ -873,7 +873,7 @@ class BookService {
             
             if ($progress) {
                 $metadata['progress'] = [
-                    'percentage' => floatval($progress['percentage'] ?? 0) * 100,
+                    'percentage' => floatval($progress['percentage'] ?? 0) * 100.0,
                     'device' => $progress['device'] ?? 'Unknown',
                     'device_id' => $progress['device_id'] ?? '',
                     'updated_at' => $progress['updated_at'] ?? '',
