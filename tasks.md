@@ -154,7 +154,9 @@ Moved out of Phase 1:
 - [x] 4.9 Replace 26× `OC.Notification.showTemporary` with `@nextcloud/dialogs` toasts (**F4**)
 - [x] 4.10 Replace `OC.generateUrl` → `@nextcloud/router`, `OC.requestToken` → `@nextcloud/axios`
 - [x] 4.11 Delete `js/koreader.js`, `js/upload.js`, and the legacy `templates/page.php` body (**F3**)
-- [ ] 4.12 Add `.php-cs-fixer.dist.php`, `psalm.xml`, `tests/` skeleton (deferred: CI now covers
+- [~] 4.12 Add `.php-cs-fixer.dist.php`, `psalm.xml`, `tests/` skeleton — **psalm done** (see 8.8b);
+      `.php-cs-fixer` and PHP unit tests still absent, though the integration suites now cover the
+      security fixes and the device-value regressions. Original wording: (deferred: CI now covers
       `php -l` 8.2–8.5, `composer validate --strict`, info.xml schema, frontend build and both
       integration suites; static analysis and unit tests are the remaining gap)
 - [x] 4.13 Add PR CI workflow (`release.yml` pins PHP 8.1 and only runs on release). **Correction to the
@@ -276,7 +278,7 @@ in depth. Ordered cheapest-win-first, not by severity.
 - [x] 8.8 New `audit` job in `ci.yml`: `composer audit --no-dev` and
       `npm audit --audit-level=high --omit=dev`. High-and-above only, so a low-severity advisory in the
       dev tree cannot wedge every PR
-- [ ] 8.8b psalm and a `tests/` skeleton — still the open half of `4.12`. Static analysis on this
+- [x] 8.8b psalm and a `tests/` skeleton — still the open half of `4.12`. Static analysis on this
       codebase will produce a large baseline; worth doing, not worth bundling into a security pass
 
 ### Credential and auth design
