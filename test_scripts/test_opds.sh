@@ -313,6 +313,47 @@ else
     print_result "WARN" "Search without query parameter" "Some implementations may require q parameter"
 fi
 
+# Test 5b: input validation on the web endpoints
+#
+# These are the fixes from the security review. They had no coverage at all, and
+# the folder one shipped answering HTTP 500 on a traversal-shaped path because only
+# NotFoundException was caught -- found by running it, not by reading it.
+print_section "Input Validation"
+
+APP_URL="$BASE_URL/apps/koreader_companion"
+api() {
+    curl -s -u "$USERNAME:$PASSWORD" -H 'OCS-APIRequest: true' -o /dev/null -w '%{http_code}' "$@"
+}
+
+# Upload type allow-list. Filtering used to be browser-side only.
+tmp_bad=$(mktemp -t kc_bad_XXXX).txt
+printf 'not a book' > "$tmp_bad"
+code=$(api -F "file=@$tmp_bad" "$APP_URL/upload")
+rm -f "$tmp_bad"
+if [[ "$code" == "415" ]]; then
+    print_result "PASS" "Upload rejects an unsupported file type (415)"
+else
+    print_result "FAIL" "Upload accepted an unsupported file type" "HTTP $code"
+fi
+
+# Library folder validation. An empty value used to resolve to the user's whole
+# Nextcloud, and a traversal-shaped one threw a 500.
+for folder_case in ':400:empty' '../../etc:400:traversal' 'NoSuchFolderHere:404:missing'; do
+    folder="${folder_case%%:*}"
+    rest="${folder_case#*:}"
+    want="${rest%%:*}"
+    label="${rest#*:}"
+    code=$(api -X PUT -H 'Content-Type: application/json' -d "{\"folder\":\"$folder\"}" "$APP_URL/settings/folder")
+    if [[ "$code" == "$want" ]]; then
+        print_result "PASS" "Folder setting rejects $label ($want)"
+    else
+        print_result "FAIL" "Folder setting mishandled $label" "wanted $want, got $code"
+    fi
+done
+
+# Put the folder back, so later runs and the app itself still work.
+api -X PUT -H 'Content-Type: application/json' -d '{"folder":"eBooks"}' "$APP_URL/settings/folder" > /dev/null
+
 # Test 6: Book-specific Endpoints (if books exist)
 print_section "Book-specific Endpoints"
 

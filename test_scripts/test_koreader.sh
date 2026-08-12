@@ -311,6 +311,53 @@ else
 fi
 
 # Test 5: Content Type Validation
+# Test 3b: values a real device actually sends
+#
+# Both of these hid real bugs that the suite could not see, because its own
+# fixtures are conveniently small: percentage was varchar(10) and every device
+# sync failed with a 500, while '0.25' fit fine.
+print_section "Real-Device Value Tests"
+
+precise_payload='{
+    "document": "'$TEST_DOCUMENT_HASH'",
+    "progress": "/body/DocFragment[22]/body/div/p[58]/text().155",
+    "percentage": 0.6333333333333333,
+    "device": "KOReader Test",
+    "device_id": "test-device-001"
+}'
+status=$(koreader_status "PUT" "/sync/syncs/progress" "$precise_payload")
+if [[ "$status" == "200" ]]; then
+    print_result "PASS" "Full float precision percentage accepted"
+else
+    print_result "FAIL" "Full float precision percentage rejected" "HTTP $status"
+fi
+
+# Long device names hit the same class of column-width failure.
+long_device=$(printf 'D%.0s' {1..150})
+long_payload='{
+    "document": "'$TEST_DOCUMENT_HASH'",
+    "progress": "/body/DocFragment[2]/body/div/p[5]/text().10",
+    "percentage": 0.5,
+    "device": "'$long_device'",
+    "device_id": "'$long_device'"
+}'
+status=$(koreader_status "PUT" "/sync/syncs/progress" "$long_payload")
+if [[ "$status" == "200" ]]; then
+    print_result "PASS" "Over-long device name accepted (truncated, not 500)"
+else
+    print_result "FAIL" "Over-long device name caused an error" "HTTP $status"
+fi
+
+# A malformed document hash must be refused rather than stored: the column is the
+# row key and it is entirely client-controlled.
+bad_hash_payload='{"document":"not-a-hash","progress":"/body","percentage":0.5,"device":"t","device_id":"t"}'
+status=$(koreader_status "PUT" "/sync/syncs/progress" "$bad_hash_payload")
+if [[ "$status" == "400" ]]; then
+    print_result "PASS" "Malformed document hash rejected"
+else
+    print_result "FAIL" "Malformed document hash not rejected" "HTTP $status"
+fi
+
 print_section "Content Type Tests"
 
 # Test request content type flexibility - Wrong content type in request
