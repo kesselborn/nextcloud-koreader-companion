@@ -427,7 +427,11 @@ processed" was.
       correctly extracted titles and authors. CSRF is enforced (412 without a token).
       **8.1's guard proved too**: a row marked `done` carrying hand-entered `MY OWN TITLE`/`Me` survived
       a press untouched (`processed:0`), so re-extraction can no longer discard what the user typed
-- [ ] V6 Still unproven: `8.5` upload validation, `8.6` folder validation and `8.11` header escaping
+- [x] V6 **Proven by running them, and one was broken.** `8.6` answered HTTP 500 on `../../etc`
+      (only `NotFoundException` was caught) — now 400, with `..`, `.//..//..` and `/etc/passwd` also
+      covered. `8.5` and `8.11` verified: `.txt` → 415, and a filename containing a quote and non-ASCII
+      produces a clean `filename="…"` plus `filename*=UTF-8''…`. All three now have regression tests.
+      Original wording: still unproven: `8.5` upload validation, `8.6` folder validation and `8.11` header escaping
       have no test coverage — they were verified by reading, not by running. Needs `8.8b`/`4.12`
 - [x] V7b **Re-measured on a real library** (246 books, 329 MB, supplied rather than synthesised):
       feed unchanged within noise (0.78 → 0.75s), single download **0.93 → 0.80s, about 13%** — roughly
@@ -466,7 +470,7 @@ processed" was.
       identically. **Confirmed working from the reporter's own reader.**
       *Why no test caught it:* the suite sends `0.25`, which fits in 10 characters. Worth a case with
       full float precision — see `10.6`
-- [ ] 10.6 Add a KOReader test case that sends full float precision (e.g. `0.6333333333333333`) and a
+- [x] 10.6 Add a KOReader test case that sends full float precision (e.g. `0.6333333333333333`) and a
       long device name. Both would have caught `10.4`; the current fixtures are short enough to fit any
       column
 - [x] 10.7 **Reading progress from a device never reached the UI, part two.** After `10.4` fixed
