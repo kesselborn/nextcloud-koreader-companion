@@ -40,6 +40,7 @@ return [
         
         // KOReader sync API endpoints (official spec)
         ['name' => 'koreader#authUser', 'url' => '/sync/users/auth', 'verb' => 'GET'],
+        ['name' => 'koreader#createUser', 'url' => '/sync/users/create', 'verb' => 'POST'],
         ['name' => 'koreader#updateProgress', 'url' => '/sync/syncs/progress', 'verb' => 'PUT'],
         ['name' => 'koreader#getProgress', 'url' => '/sync/syncs/progress/{document}', 'verb' => 'GET'],
         ['name' => 'koreader#healthcheck', 'url' => '/sync/healthcheck', 'verb' => 'GET'],

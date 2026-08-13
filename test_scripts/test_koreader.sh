@@ -239,6 +239,19 @@ else
     print_result "FAIL" "No authentication headers" "Got status: $status_code"
 fi
 
+# The fourth kosync method. Not implementable here -- accounts are Nextcloud
+# accounts -- but it must not 404, or a client offering "register" dead-ends with
+# no clue what to do instead.
+status=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"username":"someone","password":"secret"}' \
+    "$KOREADER_BASE_URL/sync/users/create")
+if [[ "$status" == "402" ]]; then
+    print_result "PASS" "Registration refused with 402, not 404"
+else
+    print_result "FAIL" "Registration endpoint returned $status (want 402)"
+fi
+
 # Test 3: Progress Endpoints
 print_section "Progress API Tests"
 

@@ -218,6 +218,30 @@ class KoreaderController extends Controller {
         return $this->createKoreaderResponse(['message' => 'Progress updated']);
     }
 
+    /**
+     * Registration, which this server cannot offer.
+     *
+     * The kosync API has four methods and this is the fourth; the other three are
+     * implemented. Accounts here are Nextcloud accounts, so a sync client cannot
+     * create one -- an unauthenticated user-creation endpoint is exactly the kind
+     * of thing this app should not expose.
+     *
+     * Answering 402 rather than 404 because that is what the reference server
+     * returns for a username it will not create (see the kosync plugin's api.json,
+     * which lists 201 and 402 as the expected statuses). Clients read it as
+     * "cannot register, log in instead", which is the correct next step. A 404 just
+     * looks like the server is missing.
+     */
+    #[NoCSRFRequired]
+    #[PublicPage]
+    #[NoAdminRequired]
+    public function createUser() {
+        return $this->createKoreaderResponse([
+            'message' => 'This server does not create accounts. '
+                . 'Log in with your Nextcloud username and the sync password set in the app.',
+        ], 402);
+    }
+
     #[NoCSRFRequired]
     #[PublicPage]
     #[NoAdminRequired]
