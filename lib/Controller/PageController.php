@@ -119,7 +119,21 @@ class PageController extends Controller {
         // once through one code path.
         $this->bookService->ensureMetadataUpToDate($user ? $user->getUID() : '');
 
-        $baseUrl = $this->urlGenerator->getAbsoluteURL($this->urlGenerator->getWebroot());
+        // Built from the routes themselves, not by gluing paths onto the web root.
+        //
+        // Concatenation assumes the instance serves pretty URLs. Where it does not
+        // -- no .htaccess rewrite, which is common behind a reverse proxy -- every
+        // Nextcloud URL is really /index.php/apps/..., and the app still works
+        // because Nextcloud generates its own links correctly. Only the addresses
+        // shown here for pasting into an OPDS reader or a sync client were wrong,
+        // so they 404'd on exactly the instances that need index.php.
+        //
+        // linkToRouteAbsolute() knows which form this instance uses. The sync base
+        // is not a route itself, so it is derived from the one endpoint that is
+        // guaranteed to exist and never moves.
+        $opdsUrl = $this->urlGenerator->linkToRouteAbsolute('koreader_companion.opds.index');
+        $healthcheckUrl = $this->urlGenerator->linkToRouteAbsolute('koreader_companion.koreader.healthcheck');
+        $syncUrl = preg_replace('#/healthcheck$#', '', $healthcheckUrl);
 
         $hasKoreaderPassword = false;
         if ($user) {
@@ -132,8 +146,8 @@ class PageController extends Controller {
         }
 
         $this->initialState->provideInitialState('connection', [
-            'opds_url' => $baseUrl . 'apps/koreader_companion/opds',
-            'koreader_sync_url' => $baseUrl . 'apps/koreader_companion/sync',
+            'opds_url' => $opdsUrl,
+            'koreader_sync_url' => $syncUrl,
             'username' => $user ? $user->getUID() : '',
             'has_koreader_password' => $hasKoreaderPassword,
         ]);
