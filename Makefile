@@ -173,7 +173,20 @@ appstore: clean ## Build the app store tarball
 	test -f CHANGELOG.md && cp CHANGELOG.md "$(source_dir)/$(app_name)/" || true
 	test -f LICENSE     && cp LICENSE     "$(source_dir)/$(app_name)/" || true
 
-	cd "$(source_dir)" && tar -czf "$(appstore_dir)/$(app_name).tar.gz" $(app_name)
+	# macOS stores extended attributes in AppleDouble sidecars, and bsdtar embeds
+	# them as ._name entries unless COPYFILE_DISABLE is set. Nextcloud's router
+	# reflects over every PHP file it finds, so a stray ._SettingsController.php
+	# becomes `Class "OCA\KoreaderCompanion\Controller\._SettingsController" does
+	# not exist` and the whole app 500s. Strip any that exist, and stop tar adding
+	# more.
+	find "$(source_dir)" -name '._*' -delete
+	cd "$(source_dir)" && COPYFILE_DISABLE=1 tar -czf "$(appstore_dir)/$(app_name).tar.gz" $(app_name)
+
+	# Fail loudly rather than shipping one: it is invisible until the app is
+	# installed, and then it is a 500 with a baffling message.
+	@! tar -tzf "$(appstore_dir)/$(app_name).tar.gz" | grep -q '/\._' \
+	  || { echo "AppleDouble files leaked into the tarball"; exit 1; }
+
 	rm -rf "$(source_dir)"
 	@echo "Tarball created at: $(appstore_dir)/$(app_name).tar.gz"
 

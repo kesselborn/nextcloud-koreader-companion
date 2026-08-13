@@ -41,6 +41,15 @@ sudo -u www-data php occ background:cron    # see "Background jobs are not optio
 Then, per user: open the app, pick the library folder, and set a KOReader sync
 password (at least 8 characters).
 
+> **Copy the tarball itself, not the extracted directory.** macOS keeps extended
+> attributes in AppleDouble sidecars named `._<filename>`, and copying an extracted
+> tree from a Mac to a share (or with `rsync -X`) creates them on the far side.
+> Nextcloud reflects over every PHP file under `lib/Controller/`, so a stray
+> `._SettingsController.php` produces
+> `Class "OCA\KoreaderCompanion\Controller\._SettingsController" does not exist`
+> and the app 500s. If it happens:
+> `find /path/to/custom_apps/koreader_companion -name '._*' -delete`.
+
 The tarball deliberately carries **no `appinfo/signature.json`**. Nextcloud runs its
 integrity check against whatever signature an app ships, so a stale one makes a
 perfectly good install report *"Some files have not passed the integrity check"*.
