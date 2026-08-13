@@ -180,6 +180,12 @@ appstore: clean ## Build the app store tarball
 # This used to invoke a hardcoded /path/to/nextcloud/occ, which never existed.
 # Run occ in the dev container instead; the repo is bind-mounted there, so the
 # regenerated appinfo/signature.json lands straight in the working tree.
+# appinfo/signature.json is deliberately NOT kept in the repo. Nextcloud runs its
+# integrity check against whatever signature an app ships, so a stale one -- which
+# is what a committed signature becomes on the very next edit -- makes a correct
+# install report "Some files have not passed the integrity check". Generate it at
+# release time, when the tree is final, and only if publishing to the app store; a
+# manual install into custom_apps/ needs no signature at all.
 sign: ## Sign the working tree (writes appinfo/signature.json); needs `make up`
 	@test -f "$(cert_dir)/$(app_name).key" || { echo "missing $(cert_dir)/$(app_name).key"; exit 1; }
 	@test -f "$(cert_dir)/$(app_name).crt" || { echo "missing $(cert_dir)/$(app_name).crt"; exit 1; }

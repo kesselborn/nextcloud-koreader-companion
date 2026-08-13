@@ -41,3 +41,6 @@ certificates
 # ~8 MB and regenerate from `npm run build`.
 /js/*.map
 /css/*.map
+
+# Generated at release time by `make sign`; a committed one goes stale immediately.
+appinfo/signature.json

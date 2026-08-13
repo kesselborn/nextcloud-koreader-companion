@@ -21,10 +21,35 @@ Feel free to use, fork, or contribute, but please understand the limitations.
 
 ## Installation
 
-1. Download from Nextcloud App Store or install manually
-2. Enable in admin panel
-3. Configure ebook library path in admin settings
-4. Access OPDS feed at: `https://your-nextcloud.com/apps/koreader_companion/opds`
+Build a tarball and copy it into your instance's apps directory:
+
+```bash
+make appstore        # -> build/artifacts/appstore/koreader_companion.tar.gz
+```
+
+On the server:
+
+```bash
+tar -xzf koreader_companion.tar.gz -C /path/to/nextcloud/custom_apps/
+chown -R www-data:www-data /path/to/nextcloud/custom_apps/koreader_companion
+
+sudo -u www-data php occ app:enable koreader_companion
+sudo -u www-data php occ upgrade            # runs the database migrations
+sudo -u www-data php occ background:cron    # see "Background jobs are not optional"
+```
+
+Then, per user: open the app, pick the library folder, and set a KOReader sync
+password (at least 8 characters).
+
+The tarball deliberately carries **no `appinfo/signature.json`**. Nextcloud runs its
+integrity check against whatever signature an app ships, so a stale one makes a
+perfectly good install report *"Some files have not passed the integrity check"*.
+An app installed by hand into `custom_apps/` needs no signature; `make sign`
+generates one at release time, and only matters for app store publication.
+
+The OPDS feed is then at
+`https://your-nextcloud.com/apps/koreader_companion/opds`, and the KOReader sync
+server at `https://your-nextcloud.com/apps/koreader_companion/sync`.
 
 ## Requirements
 
