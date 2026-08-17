@@ -621,3 +621,31 @@ processed" was.
 - [ ] 12.7 Live sync still unresolved: `/sync/users/auth` returns nginx's "No input file specified"
       while `/sync/healthcheck` works. Depth-dependent, so it is nginx's `try_files`/front-controller
       handling rather than the app. Next step is the `/index.php/...` form
+
+## Phase 13 — Annotations (highlights and notes)
+
+Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
+
+- [x] 13.1 **kosync cannot carry annotations.** Zero mentions of annotation, highlight or bookmark in
+      `plugins/kosync.koplugin/`. The one optional extra, `metadata`, is filename/title/authors and its
+      own help text says the official server ignores it. So no endpoint of ours can receive them over the
+      sync protocol, whatever we implement
+- [x] 13.2 **KOReader has no annotation import at all** — every exporter is one-way, and the only import
+      is `importEmbeddedAnnotations()` for markup already inside a PDF. Two-way sync of notes is
+      therefore impossible with KOReader today, not just impossible here. Worth saying plainly before
+      anyone promises "sync"
+- [x] 13.3 Surveyed the export targets. Only `nextcloud` (Notes app REST API) combines a configurable
+      host with HTTPS; `xmnote` and `joplin` are `http://` only, and `readwise` hardcodes its host. So an
+      export-based route on a public instance means the Notes app — and it delivers **markdown**, so
+      positions are lost and highlights could only be located by text search
+- [x] 13.4 Read a real sidecar. `pos0`/`pos1` are our xpointer format, so **exact** placement is possible
+      from a sidecar and only from a sidecar. `rendition.annotations.highlight()` and `section.find()`
+      both exist in the epub.js already shipped
+- [ ] 13.5 **Blocked on transport, not format.** KOReader's cloud storage downloads the book, so the
+      sidecar is written beside the *local* copy and never reaches Nextcloud by itself. Check whether
+      `.sdr` directories actually appear in the library folder on the server before building anything
+- [ ] 13.6 If they do: parse the sidecar (Lua table, not JSON), refuse when `cre_dom_version < 20240114`
+      since older files count `DocFragment` differently, and extend the position conversion to build a
+      **range** CFI from `pos0`..`pos1` — the current one resolves single points only
+- [ ] 13.7 UI, once data exists: a badge on the book card opening a per-book list (`chapter`, `datetime`,
+      `text`, optional `note`), and the ranges drawn in the reader with a jump-to-position link
