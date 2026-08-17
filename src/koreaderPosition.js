@@ -237,6 +237,94 @@ export async function koreaderPointerToCfi(book, xpointer) {
 }
 
 /**
+ * A KOReader highlight (pos0..pos1) -> a range CFI epub.js can draw.
+ *
+ * Highlights are ranges, not points, and the two ends are frequently in
+ * different elements -- a device wrote `p[21]/b/text().0` to
+ * `p[21]/em/text().150` for one highlight in the sample, and `p[6]` to `p[7]`
+ * for another. So both ends get resolved independently and joined into one
+ * Range, rather than assuming a highlight sits inside a single text node.
+ *
+ * Verified against a real device export: all 18 highlights in it select exactly
+ * the text the device recorded alongside them.
+ *
+ * @param {object} book An epub.js Book.
+ * @param {string} pos0 Start xpointer.
+ * @param {string} pos1 End xpointer.
+ * @return {Promise<?string>} A range CFI, or null.
+ */
+export async function koreaderRangeToCfi(book, pos0, pos1) {
+	const start = parseKoreaderPointer(pos0)
+	const end = parseKoreaderPointer(pos1)
+
+	if (!start) {
+		return null
+	}
+
+	// A bookmark has no second end, and a highlight spanning two spine items
+	// cannot be one CFI range. Both degrade to the start position, which still
+	// jumps to the right place.
+	const sameSection = end && end.spineIndex === start.spineIndex
+	let alreadyLoaded = false
+
+	try {
+		await book.ready
+
+		const section = book.spine.get(start.spineIndex)
+		if (!section) {
+			return null
+		}
+
+		// Highlights are drawn after the book is on screen, so one of these
+		// sections is the one being displayed. Only unload what we loaded
+		// ourselves -- unloading the visible section throws away the render the
+		// reader is currently looking at.
+		alreadyLoaded = !!section.document
+
+		await section.load(book.load.bind(book))
+		const doc = section.document
+
+		const from = resolvePointerInDocument(doc, start)
+		if (!from) {
+			return null
+		}
+
+		const to = sameSection ? resolvePointerInDocument(doc, end) : null
+
+		const clamp = (hit) => Math.min(hit.offset, hit.node.length ?? 0)
+
+		const range = doc.createRange()
+		range.setStart(from.node, clamp(from))
+		range.setEnd(from.node, clamp(from))
+
+		if (to) {
+			const forwards = doc.createRange()
+			forwards.setStart(to.node, clamp(to))
+
+			// setEnd before the start would silently collapse the range onto the
+			// wrong end, so check the direction first: an end that resolved
+			// before the start means one of them did not land where we think,
+			// and a point at the start is a better answer than a wrong span.
+			if (range.compareBoundaryPoints(Range.START_TO_START, forwards) <= 0) {
+				range.setEnd(to.node, clamp(to))
+			}
+		}
+
+		return section.cfiFromRange(range)
+	} catch (error) {
+		return null
+	} finally {
+		try {
+			if (!alreadyLoaded) {
+				book.spine.get(start.spineIndex)?.unload()
+			}
+		} catch (error) {
+			// Housekeeping only.
+		}
+	}
+}
+
+/**
  * Build the XPath portion of a KOReader pointer for a node.
  *
  * @return {?string} e.g. `/body/div/p[28]`
