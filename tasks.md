@@ -641,11 +641,26 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
 - [x] 13.4 Read a real sidecar. `pos0`/`pos1` are our xpointer format, so **exact** placement is possible
       from a sidecar and only from a sidecar. `rendition.annotations.highlight()` and `section.find()`
       both exist in the epub.js already shipped
-- [ ] 13.5 **Blocked on transport, not format.** KOReader's cloud storage downloads the book, so the
-      sidecar is written beside the *local* copy and never reaches Nextcloud by itself. Check whether
-      `.sdr` directories actually appear in the library folder on the server before building anything
-- [ ] 13.6 If they do: parse the sidecar (Lua table, not JSON), refuse when `cre_dom_version < 20240114`
-      since older files count `DocFragment` differently, and extend the position conversion to build a
+- [x] 13.5 **Transport answered: a third-party plugin, over WebDAV.** Confirmed no `.sdr` reaches the
+      server on its own — OPDS downloads the book, so the sidecar stays on the device. But
+      `AnnotationSync.koplugin` and `highlightsync.koplugin` both upload **one JSON file per book to
+      cloud storage including WebDAV**, i.e. straight into a Nextcloud folder with an app password.
+      Recommend AnnotationSync: unit tests with ground-truth fixtures, CI, deletion tracking, PDF
+      support, vs highlightsync's self-declared beta
+- [x] 13.6 **The remote filename is a join key we already index.** AnnotationSync names files
+      `<partialMD5>.json` using `util.partialMD5`, which is byte-identical to
+      `DocumentHashGenerator::generateBinaryHash()` and to the `document` value kosync sends. Matching is
+      an indexed lookup against `oc_koreader_hash_mapping` — no filename or title heuristics
+- [ ] 13.7 Parse the uploaded JSON — **not** Lua, which drops the parser problem entirely. Two shapes to
+      accept: an object keyed by `pos0||pos1` (AnnotationSync) and a bare array (highlightsync); records
+      are the sidecar's own, so `pos0`/`pos1` survive. Extend the position conversion to build a
       **range** CFI from `pos0`..`pos1` — the current one resolves single points only
-- [ ] 13.7 UI, once data exists: a badge on the book card opening a per-book list (`chapter`, `datetime`,
+- [ ] 13.8 `cre_dom_version` is absent from the JSON, so the `< 20240114` dialect guard cannot come from
+      the file. Read it from a co-present `metadata.epub.lua` if there is one, otherwise skip-with-warning
+      on an unresolvable pointer rather than placing a highlight at a guessed offset
+- [ ] 13.9 Unrelated but found while reading kosync: the **"Send document metadata"** toggle sends
+      `{filename, title, authors}` with every progress push (`getMetadata()`, `main.lua:693`). Not
+      annotations — but consuming it would let us label progress rows whose hash matches no book, instead
+      of showing an opaque hash
+- [ ] 13.10 UI, once data exists: a badge on the book card opening a per-book list (`chapter`, `datetime`,
       `text`, optional `note`), and the ranges drawn in the reader with a jump-to-position link
