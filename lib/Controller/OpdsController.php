@@ -28,6 +28,15 @@ class OpdsController extends Controller {
     /** Set when core reported the caller is already being delayed. */
     private bool $throttled = false;
 
+    /**
+     * Whether the request actually carried credentials.
+     *
+     * A request with no Authorization header is not a failed login -- it is the
+     * first half of HTTP Basic authentication. Every OPDS reader sends one, gets
+     * the 401 with WWW-Authenticate, and repeats with credentials.
+     */
+    private bool $credentialsOffered = false;
+
     public function __construct(IRequest $request, $appName, BookService $bookService, IUserSession $userSession, IThrottler $throttler, IURLGenerator $urlGenerator) {
         parent::__construct($appName, $request);
         $this->bookService = $bookService;
@@ -62,6 +71,7 @@ class OpdsController extends Controller {
         }
 
         [$username, $password] = $parts;
+        $this->credentialsOffered = true;
 
         try {
             // Use logClientIn() which handles app passwords, LDAP, 2FA, and throttling
@@ -96,12 +106,16 @@ class OpdsController extends Controller {
             return new DataResponse(['error' => 'Too many requests'], Http::STATUS_TOO_MANY_REQUESTS);
         }
 
-        // Registers the failure with the brute-force throttler. Previously nothing
-        // here did: core's logClientIn() applied its own delay, but the app added
-        // no attempt of its own and the endpoints carried no protection attribute.
         $response = new DataResponse(['error' => 'Unauthorized'], 401);
         $response->addHeader('WWW-Authenticate', 'Basic realm="Nextcloud OPDS"');
-        $response->throttle(['action' => 'koreader_opds']);
+
+        // Only a rejected *credential* counts against the throttler. Counting the
+        // credential-less first request as well meant ordinary browsing tripped the
+        // brute-force protection: every reader opens with one, so a handful of page
+        // loads was enough to earn a 429.
+        if ($this->credentialsOffered) {
+            $response->throttle(['action' => 'koreader_opds']);
+        }
 
         return $response;
     }

@@ -313,6 +313,23 @@ else
     print_result "WARN" "Search without query parameter" "Some implementations may require q parameter"
 fi
 
+# HTTP Basic authentication starts with a credential-less request: the client asks,
+# gets 401 + WWW-Authenticate, then repeats with credentials. Every OPDS reader does
+# this on every page. Counting those as failed logins made ordinary browsing trip
+# the brute-force protection after a handful of requests.
+print_section "Authentication Handshake"
+
+handshake_ok=true
+for _ in $(seq 1 15); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "$OPDS_BASE_URL")
+    if [[ "$code" == "429" ]]; then handshake_ok=false; break; fi
+done
+if [[ "$handshake_ok" == true ]]; then
+    print_result "PASS" "Credential-less requests are not counted as failed logins"
+else
+    print_result "FAIL" "Anonymous requests tripped the brute-force throttle (429)"
+fi
+
 # Test 5b: input validation on the web endpoints
 #
 # These are the fixes from the security review. They had no coverage at all, and
