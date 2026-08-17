@@ -44,3 +44,6 @@ certificates
 
 # Generated at release time by `make sign`; a committed one goes stale immediately.
 appinfo/signature.json
+
+# Python bytecode from the dev helper scripts
+__pycache__/
