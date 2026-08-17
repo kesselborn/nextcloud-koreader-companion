@@ -321,25 +321,6 @@ export default {
 		background-color: var(--color-primary-element);
 	}
 
-	// The whole cover opens the book. Sits under the action buttons, which is why
-	// they still receive their own clicks.
-	&__open {
-		position: absolute;
-		inset: 0;
-		z-index: 0;
-		appearance: none;
-		background: none;
-		border: 0;
-		padding: 0;
-		cursor: pointer;
-
-		&:focus-visible {
-			outline: 2px solid var(--color-primary-element);
-			outline-offset: -2px;
-			border-radius: var(--border-radius-large, 8px);
-		}
-	}
-
 	&__actions {
 		position: absolute;
 		inset-block-start: 4px;
@@ -423,6 +404,38 @@ export default {
 
 	&__device {
 		opacity: .8;
+	}
+}
+
+// The whole cover opens the book, so the button covers it and paints nothing. It
+// sits under the action buttons, which is why those still receive their own clicks.
+//
+// Every box and paint property is pinned, and the selector carries the element name
+// to outweigh a bare `button` rule. Nextcloud's core CSS styles buttons globally and
+// was already leaking in: the element sat 3px inside the cover because `margin` was
+// left to the cascade. A background arriving the same way would paint over the
+// artwork -- which is exactly what must not happen to an element whose entire job is
+// to be invisible.
+button.book__open {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	appearance: none;
+	background: transparent;
+	background-image: none;
+	box-shadow: none;
+	border: 0;
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	min-height: 0;
+	font-size: inherit;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid var(--color-primary-element);
+		outline-offset: -2px;
+		border-radius: var(--border-radius-large, 8px);
 	}
 }
 </style>
