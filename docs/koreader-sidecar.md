@@ -189,6 +189,41 @@ settings the uploaded file is named exactly the hash already in
 `oc_koreader_hash_mapping` — matching is an indexed lookup, with no filename or title
 heuristics anywhere.
 
+### Where the files should land
+
+The plugins write **one flat folder for the whole library**, not a file beside each
+book — so the layout of the library itself (`Author/Book/file.epub` or anything else)
+is irrelevant. One folder, per user.
+
+Proposal: derive it from the library folder rather than adding a setting.
+
+```
+<library folder>/.koreader-annotations/
+```
+
+Why this and not a configurable path:
+
+- The library folder is already a setting we own, so this needs no new configuration
+  and no new path validation — `setFolder`'s traversal handling was already one 500
+  (`../../etc`, fixed by broadening the catch to `\Throwable`), and a second
+  user-supplied path is a second chance at the same class of bug.
+- `.json` is not in `SUPPORTED_EXTENSIONS`, so the folder is invisible to
+  `scanFolder()`, both listeners, OPDS and the web UI. Nothing needs excluding.
+- Hidden, so it does not clutter the library in the Files app. It costs the user the
+  "show hidden files" toggle when they want to look — an acceptable trade for not
+  putting a machine-managed directory in the middle of their books.
+- Moving the library folder moves the annotations with it.
+
+KOReader can reach it: `WebDavApi.listFolder` (`providers/webdav.lua:95`) lists
+collections unconditionally, with no dotfile filter, and `createFolder` issues MKCOL,
+so the folder can even be created from the device. One thing to warn about in the
+docs: that browser filters *files* through `DocumentRegistry:hasProvider()`, so the
+folder will look **empty** on the device even when full of JSON. That is expected, not
+a failure.
+
+The `.progress.json` companions land there too — a second progress source for books
+that never used kosync (see `last_xpointer` above).
+
 ### What the JSON loses
 
 `cre_dom_version` is **not** in it — only the annotation records are. The dialect
