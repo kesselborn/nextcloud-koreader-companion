@@ -1,6 +1,7 @@
 # KOReader Companion
 
-Transform your Nextcloud into an authenticated OPDS ebook library with full KOReader sync support.
+Turn a Nextcloud folder into an OPDS library, a KOReader sync server and a reader — with the
+highlights you made on your e-reader shown alongside the books.
 
 ## Personal Development Project
 
@@ -12,16 +13,82 @@ Transform your Nextcloud into an authenticated OPDS ebook library with full KORe
 
 Feel free to use, fork, or contribute, but please understand the limitations.
 
-## Features
+## What it does
 
-- OPDS-compatible ebook library from any Nextcloud folder
-- KOReader sync support for reading progress
-- In-browser EPUB reader that resumes where your device left off
-- Highlights and notes from KOReader, listed per book and drawn in the reader
-- Support for EPUB and PDF files
-- Secure authentication using Nextcloud credentials
+Your ebooks stay ordinary files in an ordinary Nextcloud folder. This app puts three interfaces on
+top of them, and one web UI to see all of it.
 
-## Installation
+### An OPDS catalogue
+
+- OPDS 1.2 feed over any folder you choose — any OPDS reader can browse it, not just KOReader
+- Browse by author, series, genre, format or language; full-text search via OpenSearch
+- Covers as thumbnails, pagination for large libraries
+- Authenticated with your **Nextcloud** credentials, through Nextcloud's own login path — app
+  passwords, LDAP and 2FA all work, because the app never checks a password itself
+
+### Reading progress sync
+
+- Speaks KOReader's own `kosync` protocol, so the *Progress sync* screen on the device works
+  unmodified against your own server
+- Positions travel as KOReader xpointers, not percentages, so a device resumes on the exact word
+- A separate sync password, never your account password: the protocol puts an MD5 of it on the wire
+- Each cover shows how far you are and which device last reported it; the library can be sorted by
+  what you read most recently
+
+### An EPUB reader in the browser
+
+- Opens at the position your device last synced, and says which device that was
+- Real page numbers where the book carries a page list, otherwise a measured equivalent; font size,
+  chapter name, keyboard paging
+- On closing it *offers* to push your new position back to your devices — never silently
+- Book content cannot execute: the reader frame is sandboxed without script permission, and the page
+  CSP never allows `blob:` scripts
+
+### Highlights and notes from your device
+
+- Reads the annotation files a KOReader plugin uploads, so your highlights show up in the app
+- A badge on each cover opens a per-book list grouped by chapter: the passage, your note, the page
+  and when you made it
+- "Show in book" jumps into the reader at that passage with the chapter's highlights drawn in the
+  colour you used on the device
+- Placement is exact rather than a text search, because the device's own position pointers survive
+  the trip
+
+### Library management
+
+- Upload from the web UI, edit metadata, batch-rename files to a consistent pattern
+- EPUB metadata is extracted in a background job; books show a pending state until it runs, with a
+  button to do it immediately
+- **EPUB, PDF, CBZ and CBR.** PDF metadata comes from the filename (Calibre layouts are understood)
+  rather than by parsing the file, which was slow and mostly wrong; PDFs get a placeholder cover
+- No external services, no telemetry, no outbound calls. Rate limits and brute-force protection on
+  every public endpoint — see [`docs/security-audit.html`](docs/security-audit.html)
+
+## Screenshots
+
+<!-- Drop the images in docs/img/ and swap the paths in. Suggested set:
+     the library grid, the highlight list, the reader with highlights drawn. -->
+
+| The library | Highlights |
+|---|---|
+| _screenshot pending_ | _screenshot pending_ |
+
+## Requirements
+
+- Nextcloud 34
+- PHP 8.2+
+- **Working background jobs** — see below
+
+> The Nextcloud 34 migration is complete. Nextcloud 31 and earlier are no longer supported: the
+> frontend was rewritten off jQuery, which NC 33 dropped, and onto APIs that only exist from 34.
+> [`docs/nc34-audit.html`](docs/nc34-audit.html) records what broke and why;
+> [`docs/security-audit.html`](docs/security-audit.html) covers running this on a public instance.
+
+## Installing it in Nextcloud
+
+There is no app store release: build the tarball yourself and unpack it into your instance. Do this
+first — the KOReader setup below needs the server to be answering.
+
 
 Build a tarball and copy it into your instance's apps directory:
 
@@ -84,16 +151,91 @@ The OPDS feed is then at
 `https://your-nextcloud.com/apps/koreader_companion/opds`, and the KOReader sync
 server at `https://your-nextcloud.com/apps/koreader_companion/sync`.
 
-## Requirements
+## Setting up KOReader
 
-- Nextcloud 34
-- PHP 8.2+
-- **Working background jobs** — see below
+Three separate things, configured in three different places on the device. They are independent: you
+can have the catalogue without progress sync, or progress without annotations. All three need your
+Nextcloud user name and an **app password** (*Settings → Security → Devices & sessions* — not your
+account password).
 
-> The Nextcloud 34 migration is complete. Nextcloud 31 and earlier are no longer supported: the
-> frontend was rewritten off jQuery, which NC 33 dropped, and onto APIs that only exist from 34.
-> [`docs/nc34-audit.html`](docs/nc34-audit.html) records what broke and why;
-> [`docs/security-audit.html`](docs/security-audit.html) covers running this on a public instance.
+Replace `https://cloud.example.com` with your own host throughout.
+
+### 1. The library — OPDS
+
+In the file browser: *main menu → OPDS catalog → add a new catalogue*
+
+| Field | Value |
+|---|---|
+| Catalog name | anything, e.g. `Nextcloud` |
+| Catalog URL | `https://cloud.example.com/apps/koreader_companion/opds` |
+| Username | your Nextcloud user name |
+| Password | an app password |
+
+Browsing a book downloads it to the device. That matters for what follows: the copy KOReader reads is
+its own, which is why progress and annotations both need a channel back rather than just working.
+
+### 2. Reading progress — KOReader sync
+
+*main menu → Progress sync → Custom sync server*
+
+| Field | Value |
+|---|---|
+| Custom sync server | `https://cloud.example.com/apps/koreader_companion/sync` |
+| Username | your Nextcloud user name |
+| Password | the **sync password** you set in the app's *KOReader sync* screen (min. 8 characters) |
+
+Then *Register / Login* and use **Login** — *Register* is deliberately refused by this server (it
+answers `402`), because the account already exists: it is your Nextcloud one.
+
+Turn on *Sync every N pages* in the same menu if you want it to happen without asking.
+
+This password is separate on purpose. The protocol requires the client to send an MD5 of it in a
+header, so it must never be your Nextcloud password.
+
+### 3. Highlights and notes — AnnotationSync
+
+This one needs a plugin, because **stock KOReader cannot send annotations anywhere**: the sync
+protocol has no field for them, and the built-in exporters are one-way and throw the positions away.
+Its *Send document metadata* option does not help either — that sends the filename, title and
+authors, nothing more.
+
+[`AnnotationSync.koplugin`](https://github.com/dani84bs/AnnotationSync.koplugin) uploads one JSON
+file per book to cloud storage, and WebDAV is one of its targets — so it can write straight into your
+Nextcloud, and this app reads what lands there.
+
+1. Download the plugin and copy the `AnnotationSync.koplugin` folder into `koreader/plugins/` on the
+   device (the folder must keep that exact name). Restart KOReader, then enable it from the plugins
+   menu.
+2. *Tools → Annotation Sync → Settings → Cloud settings*, add a **WebDAV** server:
+
+   | Field | Value |
+   |---|---|
+   | Address | `https://cloud.example.com/remote.php/dav/files/<username>/` |
+   | Folder | your library folder, e.g. `/eBooks/` |
+   | Username | your Nextcloud user name |
+   | Password | an app password |
+
+3. Open a book, make a highlight, then *Tools → Annotation Sync → Manual Sync*.
+4. Reload the app in the browser. The cover now carries a badge with the count.
+
+Things worth knowing before you go hunting for a fault:
+
+- **The folder will look empty in KOReader's own cloud browser.** It only lists files it can open, so
+  `.json` is invisible to it even when it is full of them. Expected, not a failure.
+- Nothing to configure on the Nextcloud side. The app reads the library folder it already knows
+  about, and the plugin writes one flat folder for the whole library — so however your books are
+  organised makes no difference.
+- A `.koreader-annotations/` subfolder inside the library is also read, if you would rather keep the
+  files out of sight. It is hidden, so the Files app shows it only with *Show hidden files* on. If
+  the same file exists in both places, the one in the library folder wins.
+- **Leave AnnotationSync's own progress sync off.** Progress is what step 2 is for, and two sources
+  for one position is exactly how two devices start disagreeing about where you are.
+- Bookmarks appear in the list but are not drawn in the reader — a bookmark is a point, not a range.
+- Highlights written by a KOReader older than crengine DOM version `20240114` may not resolve, as it
+  changed how spine items are counted. Those are skipped rather than placed at a guess.
+  [`docs/koreader-sidecar.md`](docs/koreader-sidecar.md) explains why.
+
+## Server-side notes
 
 ### Background jobs are not optional
 
@@ -119,39 +261,6 @@ next globally.
 
 If you would rather not wait, the library shows an **Extract metadata now** button whenever any book
 is still pending; it does the extraction in the request instead.
-
-### Syncing highlights and notes from KOReader
-
-KOReader cannot send annotations to a server by itself — the sync protocol has no field for them, and
-its built-in exporters are one-way and throw the positions away. Its **"Send document metadata"**
-option does not help either: that sends the filename, title and authors, nothing more.
-
-What works is a third-party plugin that uploads a file per book, and WebDAV is one of its targets:
-
-1. Install [`AnnotationSync.koplugin`](https://github.com/dani84bs/AnnotationSync.koplugin) into
-   `koreader/plugins/` on your device.
-2. Create an **app password** in Nextcloud under *Security → Devices & sessions*.
-3. Point the plugin's cloud storage at your Nextcloud:
-   - address `https://<your-host>/remote.php/dav/files/<username>/`
-   - folder: **your library folder** (the one this app is pointed at, e.g. `/eBooks/`)
-4. Sync a book. Its highlights then appear as a badge on the cover, and in the reader.
-
-Notes:
-
-- Nothing to configure in this app: it reads the library folder it already knows about. The uploaded
-  files sit alongside your books rather than next to each one, because the plugin writes one flat
-  folder for the whole library — so however your books are organised is irrelevant.
-- A `.koreader-annotations/` subfolder is also read, if you would rather keep them out of the way. It
-  is hidden, so the Files app only shows it with *Show hidden files* enabled. If the same file exists
-  in both, the one in the library folder wins — that is the one a device is actively writing.
-- **KOReader's cloud browser will not show the `.json` files.** It filters files through
-  `DocumentRegistry:hasProvider()`, so they are invisible to it even when they are there. Expected.
-- Leave the plugin's own *reading progress* sync off. Progress belongs to this app's `/sync` endpoints,
-  and two sources for one position is how two devices start disagreeing about where you are.
-- Bookmarks are listed but not drawn — a bookmark is a point, not a range.
-- Highlights written by a KOReader older than DOM version `20240114` may not resolve, because
-  crengine changed how it counts spine items. Those are skipped rather than placed at a guess.
-  [`docs/koreader-sidecar.md`](docs/koreader-sidecar.md) has the details.
 
 ## Local development
 
