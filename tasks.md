@@ -597,3 +597,27 @@ processed" was.
   `book.ready` resolves (without awaiting it, every lookup silently fell back to percentage), and
   `rendition.currentLocation()` is not reliably populated — it is a side effect of the `relocated`
   event, so take the CFI from the event
+
+## Phase 12 — Found in live deployment
+
+- [x] 12.1 **OPDS threw 429 during ordinary browsing.** `8.13` registered a brute-force attempt on every
+      401, including the credential-less first request that opens every HTTP Basic exchange — so a few
+      page loads tripped the throttle. Only rejected credentials count now.
+      **Why no test caught it:** `auth.bruteforce.protection.enabled` is `false` in the dev container, so
+      `throttle()` had been a no-op through every run. Enabling it showed 20 handshakes → 0 attempts,
+      15 bad logins → 429 from the 12th. Regression test added
+- [x] 12.2 `POST /sync/users/create` was missing — the fourth kosync method — so a client offering
+      "register" hit a bare 404. Returns 402 with an explanation now, matching the reference server
+- [x] 12.3 The advertised OPDS and sync URLs were string-concatenated onto the web root, which assumes
+      pretty URLs. Derived from the routes now, so instances needing `/index.php/` advertise correctly
+- [x] 12.4 AppleDouble sidecars (`._SettingsController.php`) crashed the router with a baffling
+      ReflectionException. Build strips them, disables `COPYFILE_DISABLE`, and fails if any leak in
+- [x] 12.5 The committed `appinfo/signature.json` was v1.2.4's, so a correct install failed Nextcloud's
+      integrity check. Now generated at release time only
+- [ ] 12.6 **Consider enabling brute-force protection in the dev container.** It being off is precisely
+      why 12.1 shipped. The counter-argument is that it makes the test suites flaky, since they
+      deliberately send bad credentials — which is probably why it is off. A dedicated profile, or
+      resetting the counter between suites, would give coverage without the flakiness
+- [ ] 12.7 Live sync still unresolved: `/sync/users/auth` returns nginx's "No input file specified"
+      while `/sync/healthcheck` works. Depth-dependent, so it is nginx's `try_files`/front-controller
+      handling rather than the app. Next step is the `/index.php/...` form
