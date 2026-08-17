@@ -30,6 +30,19 @@
 				<div class="book__progress-fill" :style="{ width: percentage + '%' }" />
 			</div>
 
+			<!-- Only shown for books that actually have highlights, so an empty
+			     library never grows a row of zeroes. -->
+			<button
+				v-if="annotationCount > 0"
+				type="button"
+				class="book__annotations"
+				:title="annotationsTitle"
+				:aria-label="annotationsTitle"
+				@click="$emit('annotations')">
+				<Marker :size="16" />
+				<span>{{ annotationCount }}</span>
+			</button>
+
 			<!-- Action buttons always visible on the cover, not hidden behind a
 			     kebab menu. Edit and Delete are the two things people look for. -->
 			<div v-if="!pending" class="book__actions">
@@ -99,6 +112,7 @@ import BookOpenPageVariant from 'vue-material-design-icons/BookOpenPageVariant.v
 import BookOpenVariant from 'vue-material-design-icons/BookOpenVariantOutline.vue'
 import Download from 'vue-material-design-icons/Download.vue'
 import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
+import Marker from 'vue-material-design-icons/Marker.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 
 import { coverUrl } from '../api.js'
@@ -116,6 +130,7 @@ export default {
 		BookOpenVariant,
 		Download,
 		FilePdfBox,
+		Marker,
 		NcButton,
 		NcLoadingIcon,
 		Pencil,
@@ -126,9 +141,13 @@ export default {
 			type: Object,
 			required: true,
 		},
+		annotationCount: {
+			type: Number,
+			default: 0,
+		},
 	},
 
-	emits: ['edit', 'read', 'search-author'],
+	emits: ['annotations', 'edit', 'read', 'search-author'],
 
 	data() {
 		return {
@@ -177,6 +196,14 @@ export default {
 				parts.push(this.progress.updated_at)
 			}
 			return parts.join(' · ')
+		},
+		annotationsTitle() {
+			return n(
+				'koreader_companion',
+				'%n highlight from your device',
+				'%n highlights from your device',
+				this.annotationCount,
+			)
 		},
 		downloadUrl() {
 			// The books are ordinary Nextcloud files, so Files serves them -- no
@@ -290,6 +317,37 @@ export default {
 	&__progress-fill {
 		height: 100%;
 		background-color: var(--color-primary-element);
+	}
+
+	// Bottom-inline-start, so it never collides with the action buttons in the
+	// opposite corner.
+	&__annotations {
+		position: absolute;
+		inset-block-end: calc(var(--default-grid-baseline) * 2);
+		inset-inline-start: calc(var(--default-grid-baseline) * 2);
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding: 2px 6px 2px 4px;
+		border: 0;
+		border-radius: var(--border-radius-pill, 16px);
+		background-color: var(--color-primary-element);
+		color: var(--color-primary-element-text);
+		font-size: .8em;
+		font-weight: bold;
+		cursor: pointer;
+		opacity: .9;
+
+		&:hover,
+		&:focus-visible {
+			opacity: 1;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--color-main-text);
+			outline-offset: 1px;
+		}
 	}
 
 	&__actions {

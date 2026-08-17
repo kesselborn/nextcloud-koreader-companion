@@ -10,7 +10,10 @@
 				<span v-if="chapter" class="reader__chapter">{{ chapter }}</span>
 				<!-- Say so when the book was opened somewhere the reader did not
 				     leave it: being moved without explanation is disorienting. -->
-				<span v-if="openedFrom" class="reader__resumed">
+				<span v-if="openedAtHighlight" class="reader__resumed">
+					{{ t('koreader_companion', 'Jumped to your highlight') }}
+				</span>
+				<span v-else-if="openedFrom" class="reader__resumed">
 					{{ t('koreader_companion', 'Resumed from {device}', { device: openedFrom }) }}
 				</span>
 				<div class="reader__zoom">
@@ -113,14 +116,28 @@ import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
 import FormatFontSizeDecrease from 'vue-material-design-icons/FormatFontSizeDecrease.vue'
 import FormatFontSizeIncrease from 'vue-material-design-icons/FormatFontSizeIncrease.vue'
 
-import { fetchBookFile, fetchProgress, saveProgress } from '../api.js'
-import { cfiToKoreaderPointer, koreaderPointerToCfi } from '../koreaderPosition.js'
+import { fetchAnnotations, fetchBookFile, fetchProgress, saveProgress } from '../api.js'
+import { cfiToKoreaderPointer, koreaderPointerToCfi, koreaderRangeToCfi } from '../koreaderPosition.js'
 
 // Where we left off, per book. Deliberately local: KOReader's own sync is
 // device-to-device over the /sync API and uses its own progress model, and
 // writing web-reader positions into it would confuse a real device.
 const positionKey = (id) => `koreader_companion:position:${id}`
 const FONT_SIZE_KEY = 'koreader_companion:font-size'
+
+// KOReader records a colour name per highlight. Mapped rather than passed through:
+// the value goes into an SVG fill attribute, so an unknown string there would
+// silently render nothing.
+const HIGHLIGHT_COLORS = {
+	yellow: '#e9d54a',
+	green: '#5aa469',
+	blue: '#4a90d9',
+	red: '#d94a4a',
+	orange: '#e08a3c',
+	purple: '#9a5ac4',
+	gray: '#9e9e9e',
+	default: '#e9d54a',
+}
 const MIN_FONT_SIZE = 70
 const MAX_FONT_SIZE = 200
 
@@ -145,6 +162,14 @@ export default {
 			type: Object,
 			required: true,
 		},
+		/**
+		 * An annotation to open at, when the reader was opened from the highlight
+		 * list rather than from the cover.
+		 */
+		jumpTo: {
+			type: Object,
+			default: null,
+		},
 	},
 
 	emits: ['close', 'saved'],
@@ -164,6 +189,8 @@ export default {
 			// Set when the book was opened at a position synced from a device, so
 			// the reader can say so rather than silently moving the user.
 			openedFrom: '',
+			// Set when the book was opened at one of the reader's own highlights.
+			openedAtHighlight: false,
 			pendingPercentage: null,
 			saving: false,
 			askingToSave: false,
@@ -284,6 +311,7 @@ export default {
 				this.ready = true
 				this.observeResize()
 				this.loadLocations()
+				this.drawAnnotations()
 			} catch (error) {
 				this.error = t('koreader_companion', 'This book could not be opened')
 			}
@@ -361,6 +389,51 @@ export default {
 		},
 
 		/**
+		 * Draw the device's highlights onto the page.
+		 *
+		 * Fetched here rather than passed in, so highlights show whenever the book
+		 * is read -- not only when it was opened from the highlight list.
+		 *
+		 * Deliberately after the first page is on screen: converting each
+		 * pos0..pos1 pair loads that spine item's document, and doing it before
+		 * display() would delay the book appearing for something decorative.
+		 */
+		async drawAnnotations() {
+			let annotations = []
+			try {
+				annotations = await fetchAnnotations(this.book.id)
+			} catch (error) {
+				// Highlights are an addition to reading, not a precondition for it.
+				return
+			}
+
+			for (const item of annotations) {
+				if (!item.pos0 || item.type !== 'highlight') {
+					continue
+				}
+
+				try {
+					const cfi = await koreaderRangeToCfi(this.epub, item.pos0, item.pos1)
+					if (!cfi) {
+						continue
+					}
+
+					// epub.js draws the highlight as an SVG rect over the text, so the
+					// colour has to be given as SVG attributes rather than CSS.
+					this.rendition.annotations.highlight(
+						cfi,
+						{},
+						undefined,
+						'kc-highlight',
+						{ fill: HIGHLIGHT_COLORS[item.color] || HIGHLIGHT_COLORS.default, 'fill-opacity': '0.3' },
+					)
+				} catch (error) {
+					// One highlight that will not resolve must not cost the others.
+				}
+			}
+		},
+
+		/**
 		 * Where to open the book.
 		 *
 		 * A position synced from a device wins over the one this browser last
@@ -372,6 +445,16 @@ export default {
 		 */
 		async startingPosition() {
 			const local = localStorage.getItem(positionKey(this.book.id)) || undefined
+
+			// An explicit jump wins over both stored positions: the reader asked to
+			// see this passage, so anything else would be ignoring the click.
+			if (this.jumpTo?.pos0) {
+				const target = await koreaderRangeToCfi(this.epub, this.jumpTo.pos0, this.jumpTo.pos1)
+				if (target) {
+					this.openedAtHighlight = true
+					return target
+				}
+			}
 
 			// Read from the server, not from the book handed over by the library.
 			// That listing is fetched once; a device syncing afterwards leaves it

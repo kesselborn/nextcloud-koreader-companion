@@ -25,7 +25,8 @@
 				v-if="section === 'library'"
 				ref="library"
 				@edit="editBook"
-				@read="reading = $event" />
+				@read="read"
+				@annotations="showingAnnotations = $event" />
 			<SettingsView v-else-if="section === 'settings'" />
 			<ConnectionView
 				v-else
@@ -36,8 +37,15 @@
 		<ReaderModal
 			v-if="reading"
 			:book="reading"
+			:jump-to="jumpTo"
 			@saved="$refs.library?.refreshInPlace()"
-			@close="reading = null" />
+			@close="closeReader" />
+
+		<AnnotationsModal
+			v-if="showingAnnotations"
+			:book="showingAnnotations"
+			@jump="jumpToAnnotation"
+			@close="showingAnnotations = null" />
 
 		<UploadModal
 			v-if="uploadOpen"
@@ -66,6 +74,7 @@ import Cog from 'vue-material-design-icons/CogOutline.vue'
 import RssIcon from 'vue-material-design-icons/RssBox.vue'
 import SyncIcon from 'vue-material-design-icons/SyncCircle.vue'
 
+import AnnotationsModal from './components/AnnotationsModal.vue'
 import ConnectionView from './views/ConnectionView.vue'
 import LibraryView from './views/LibraryView.vue'
 import MetadataModal from './components/MetadataModal.vue'
@@ -77,6 +86,7 @@ export default {
 	name: 'App',
 
 	components: {
+		AnnotationsModal,
 		ConnectionView,
 		LibraryView,
 		MetadataModal,
@@ -96,6 +106,8 @@ export default {
 			uploadOpen: false,
 			editing: null,
 			reading: null,
+			showingAnnotations: null,
+			jumpTo: null,
 			connectionInfo: loadState('koreader_companion', 'connection', {}),
 		}
 	},
@@ -114,6 +126,29 @@ export default {
 	methods: {
 		editBook(book) {
 			this.editing = book
+		},
+
+		read(book) {
+			this.jumpTo = null
+			this.reading = book
+		},
+
+		/**
+		 * Open the book at one of its highlights.
+		 *
+		 * The list closes: it and the reader are both full-screen modals, and
+		 * stacking them would leave the reader behind an overlay.
+		 */
+		jumpToAnnotation(annotation) {
+			const book = this.showingAnnotations
+			this.showingAnnotations = null
+			this.jumpTo = annotation
+			this.reading = book
+		},
+
+		closeReader() {
+			this.reading = null
+			this.jumpTo = null
 		},
 		onUploaded() {
 			this.editing = null

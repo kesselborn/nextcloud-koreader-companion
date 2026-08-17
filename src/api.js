@@ -64,6 +64,29 @@ export async function saveProgress(id, { progress, percentage, device }) {
 	return data
 }
 
+/**
+ * Highlights and notes a device uploaded for one book.
+ */
+export async function fetchAnnotations(id) {
+	const { data } = await axios.get(url(`/books/${id}/annotations`))
+	return data?.annotations || []
+}
+
+/**
+ * Annotation counts for the books currently on screen.
+ *
+ * One request for the whole page rather than one per cover: the counts come from
+ * a folder listing, and doing that per book would read the same directory
+ * twenty-odd times.
+ */
+export async function fetchAnnotationCounts(ids) {
+	if (!ids.length) {
+		return {}
+	}
+	const { data } = await axios.get(url('/annotations/counts'), { params: { ids: ids.join(',') } })
+	return data?.counts || {}
+}
+
 export async function getSettings() {
 	const { data } = await axios.get(url('/settings'))
 	return data

@@ -75,6 +75,8 @@
 				v-for="book in books"
 				:key="book.id"
 				:book="book"
+				:annotation-count="annotationCounts[book.id] || 0"
+				@annotations="$emit('annotations', book)"
 				@edit="$emit('edit', book)"
 				@read="$emit('read', book)"
 				@search-author="searchAuthor" />
@@ -99,7 +101,7 @@ import BookOpenVariant from 'vue-material-design-icons/BookOpenVariantOutline.vu
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 
 import BookCard from '../components/BookCard.vue'
-import { fetchBooks, processPending } from '../api.js'
+import { fetchAnnotationCounts, fetchBooks, processPending } from '../api.js'
 
 const PER_PAGE = 50
 
@@ -118,11 +120,15 @@ export default {
 		Refresh,
 	},
 
-	emits: ['edit', 'read'],
+	emits: ['annotations', 'edit', 'read'],
 
 	data() {
 		return {
 			books: [],
+			// file id => highlight count, for the badge on each cover. Fetched
+			// separately because it comes from a folder listing rather than from the
+			// metadata table the listing is built from.
+			annotationCounts: {},
 			page: 1,
 			query: '',
 			// Last updated by default: what you were reading most recently is what
@@ -215,6 +221,7 @@ export default {
 					})),
 				)
 				this.books = batches.flat()
+				this.loadAnnotationCounts()
 			} catch (error) {
 				// A failed refresh is not worth interrupting the user; the next
 				// tick tries again.
@@ -273,7 +280,23 @@ export default {
 			this.page = 1
 			this.hasMore = true
 			this.books = []
+			this.annotationCounts = {}
 			await this.loadPage()
+		},
+
+		/**
+		 * Counts for whatever is on screen, in one request.
+		 *
+		 * Not awaited by the caller: the badge is an addition to a card that is
+		 * already useful, so the grid must not wait on a directory listing.
+		 */
+		async loadAnnotationCounts() {
+			const ids = this.books.map((book) => book.id)
+			try {
+				this.annotationCounts = await fetchAnnotationCounts(ids)
+			} catch (error) {
+				// No badges is a fine outcome; the covers are unaffected.
+			}
 		},
 
 		async loadPage() {
@@ -290,6 +313,7 @@ export default {
 				this.books.push(...batch)
 				this.hasMore = batch.length === PER_PAGE
 				this.page += 1
+				this.loadAnnotationCounts()
 			} catch (error) {
 				showError(t('koreader_companion', 'Could not load your library'))
 				this.hasMore = false
