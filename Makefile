@@ -7,12 +7,15 @@
 #   make test
 #
 # Release:
-#   make appstore             build the app store tarball
+#   make release              build and verify an installable tarball
+#   make appstore             build the tarball only, without the checks
 #   make sign                 sign the working tree using ~/.nextcloud/certificates
 #
 app_name     = koreader_companion
+app_version  = $(shell sed -n 's:.*<version>\(.*\)</version>.*:\1:p' appinfo/info.xml)
 build_dir    = $(CURDIR)/build
 appstore_dir = $(build_dir)/artifacts/appstore
+tarball      = $(appstore_dir)/$(app_name).tar.gz
 source_dir   = $(build_dir)/artifacts/source
 cert_dir     = $(HOME)/.nextcloud/certificates
 
@@ -34,7 +37,7 @@ BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .PHONY: help dev up down logs occ cron shell shell-www reset seed provision test \
         composer install clean appstore sign release nc31-up nc31-down nc31-provision \
-        seed-annotations \
+        seed-annotations release-checks release-verify \
         mysql-up mysql-down mysql-provision npm-install frontend watch l10n
 
 help: ## Show this help
@@ -188,15 +191,15 @@ appstore: clean ## Build the app store tarball
 	# not exist` and the whole app 500s. Strip any that exist, and stop tar adding
 	# more.
 	find "$(source_dir)" -name '._*' -delete
-	cd "$(source_dir)" && COPYFILE_DISABLE=1 tar -czf "$(appstore_dir)/$(app_name).tar.gz" $(app_name)
+	cd "$(source_dir)" && COPYFILE_DISABLE=1 tar -czf "$(tarball)" $(app_name)
 
 	# Fail loudly rather than shipping one: it is invisible until the app is
 	# installed, and then it is a 500 with a baffling message.
-	@! tar -tzf "$(appstore_dir)/$(app_name).tar.gz" | grep -q '/\._' \
+	@! tar -tzf "$(tarball)" | grep -q '/\._' \
 	  || { echo "AppleDouble files leaked into the tarball"; exit 1; }
 
 	rm -rf "$(source_dir)"
-	@echo "Tarball created at: $(appstore_dir)/$(app_name).tar.gz"
+	@echo "Tarball created at: $(tarball)"
 
 # This used to invoke a hardcoded /path/to/nextcloud/occ, which never existed.
 # Run occ in the dev container instead; the repo is bind-mounted there, so the
@@ -220,4 +223,49 @@ sign: ## Sign the working tree (writes appinfo/signature.json); needs `make up`
 	$(DC) exec -T -u root $(SERVICE) rm -f /tmp/$(app_name).key /tmp/$(app_name).crt
 	@echo "Signed. appinfo/signature.json updated in the working tree."
 
-release: appstore ## Build for release
+# Everything that has to be true before a tarball is worth carrying to a server.
+# Each of these has cost real time at least once: an AppleDouble sidecar that
+# 500s the router, a committed signature.json that fails the integrity check, a
+# stale bundle, an untranslated string, an info.xml the app store rejects.
+release: release-checks appstore release-verify ## Build a verified, installable tarball
+	@echo
+	@echo "  Release $(app_version) ready:"
+	@echo "    $(tarball)"
+	@echo
+	@echo "  Install it on the server (as the web server user):"
+	@echo "    tar -xzf $(app_name).tar.gz -C /path/to/nextcloud/custom_apps/"
+	@echo "    occ app:enable $(app_name)   # first install only"
+	@echo "    occ upgrade                      # after a version bump"
+	@echo
+	@echo "  Then hard-reload the browser: Nextcloud cache-busts js/ by app version."
+	@echo
+
+release-checks:
+	@echo "==> Checking the tree"
+	@find lib templates -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+	@node dev/l10n-extract.mjs --check
+	@command -v xmllint > /dev/null \
+	  && curl -sSfo /tmp/nc-info.xsd https://apps.nextcloud.com/schema/apps/info.xsd \
+	  && xmllint --noout --schema /tmp/nc-info.xsd appinfo/info.xml \
+	  || echo "    info.xml schema check skipped (needs xmllint and network)"
+
+# The tarball, not the tree: what ships is what was packed, and every one of
+# these has shipped broken before.
+release-verify:
+	@echo "==> Checking the tarball"
+	@test -f "$(tarball)" || { echo "no tarball at $(tarball)"; exit 1; }
+	@! tar -tzf "$(tarball)" | grep -q '/\._' \
+	  || { echo "    AppleDouble sidecars leaked -- the router will 500"; exit 1; }
+	@! tar -tzf "$(tarball)" | grep -q 'signature\.json' \
+	  || { echo "    signature.json is in the tarball -- integrity check will fail"; exit 1; }
+	@! tar -tzf "$(tarball)" | grep -qE '\.map$$' \
+	  || { echo "    sourcemaps leaked"; exit 1; }
+	@! tar -tzf "$(tarball)" | grep -qiE 'vendor/(phpunit|vimeo|psalm)' \
+	  || { echo "    dev dependencies leaked"; exit 1; }
+	@tar -xzOf "$(tarball)" $(app_name)/appinfo/info.xml | grep -q '<version>$(app_version)</version>' \
+	  || { echo "    version in the tarball does not match appinfo/info.xml"; exit 1; }
+	@echo "    ok: version $(app_version), no sidecars, no signature, no maps, no dev deps"
+	@# A release build rewrites js/ and css/ with fresh content hashes, so the
+	@# working copy can end up ahead of the last commit. CI compares the two.
+	@git diff --quiet -- js css \
+	  || echo "    NOTE: js/ and css/ changed -- commit them or CI will flag a stale bundle"

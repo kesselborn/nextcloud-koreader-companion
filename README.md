@@ -26,8 +26,25 @@ Feel free to use, fork, or contribute, but please understand the limitations.
 Build a tarball and copy it into your instance's apps directory:
 
 ```bash
-make appstore        # -> build/artifacts/appstore/koreader_companion.tar.gz
+make release         # -> build/artifacts/appstore/koreader_companion.tar.gz
 ```
+
+`make release` builds the frontend, installs PHP dependencies without the dev ones,
+packs the tarball, and then **checks the tarball it just produced**. Each check
+corresponds to something that has shipped broken before:
+
+| Check | What it prevents |
+|---|---|
+| `php -l` over `lib/` and `templates/` | a syntax error that only surfaces at runtime |
+| `l10n` in sync with the sources | a new string shipping untranslated |
+| `info.xml` against the app store schema | a manifest the store rejects |
+| no `._*` AppleDouble sidecars | `Class "…\._SettingsController" does not exist`, app 500s |
+| no `appinfo/signature.json` | *"Some files have not passed the integrity check"* |
+| no sourcemaps, no dev dependencies | ~8 MB of dead weight, and phpunit on a public server |
+| version matches `appinfo/info.xml` | installing a tarball that is not the version you think |
+
+It fails loudly rather than shipping. `make appstore` builds the same tarball without
+the checks, if you want it for something other than installing.
 
 On the server:
 
@@ -35,10 +52,15 @@ On the server:
 tar -xzf koreader_companion.tar.gz -C /path/to/nextcloud/custom_apps/
 chown -R www-data:www-data /path/to/nextcloud/custom_apps/koreader_companion
 
-sudo -u www-data php occ app:enable koreader_companion
-sudo -u www-data php occ upgrade            # runs the database migrations
+sudo -u www-data php occ app:enable koreader_companion   # first install only
+sudo -u www-data php occ upgrade            # after every version bump
 sudo -u www-data php occ background:cron    # see "Background jobs are not optional"
 ```
+
+> **`occ upgrade` is not optional after a version bump**, and neither is a hard reload
+> in the browser. Until the upgrade runs the instance answers **503** to everything;
+> and Nextcloud cache-busts `js/` by app version, so a browser holding the previous
+> bundle keeps running the old frontend against the new backend.
 
 Then, per user: open the app, pick the library folder, and set a KOReader sync
 password (at least 8 characters).
