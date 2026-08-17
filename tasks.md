@@ -662,10 +662,17 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       its own server plus a deliberately separate password. It also only exists on dev/nightly builds.
       Reduce the friction on our side instead — one connection page stating all three blocks with copyable
       values and a link to create an app password
-- [ ] 13.9 Parse the uploaded JSON — **not** Lua, which drops the parser problem entirely. Two shapes to
-      accept: an object keyed by `pos0||pos1` (AnnotationSync) and a bare array (highlightsync); records
-      are the sidecar's own, so `pos0`/`pos1` survive. Extend the position conversion to build a
-      **range** CFI from `pos0`..`pos1` — the current one resolves single points only
+- [x] 13.9 **Built.** `AnnotationService` reads the uploaded JSON -- not Lua, which dropped the parser
+      problem entirely -- accepting both shapes in the wild: an object keyed by `pos0||pos1`
+      (AnnotationSync) and a bare array (highlightsync). `koreaderRangeToCfi()` resolves both ends
+      independently into one Range, since the ends are frequently in different elements
+      (`p[21]/b/text().0` -> `p[21]/em/text().150`). Bounded at 4 MB and 2000 records per file
+- [x] 13.9a **Verified against a real export, not eyeballed.** Resolving all 18 highlights of the sample
+      against the real EPUB reproduces the text the device stored beside each one (the two apparent
+      mismatches were a missing space at a block boundary, nothing more). In the browser: 18/18 convert,
+      0 failures; 5 marks drawn on the chapter that has 5. The uploaded file's name also matched the
+      binary hash our own indexer had independently computed for the same bytes -- the join key holds
+      end-to-end
 - [ ] 13.10 `cre_dom_version` is absent from the JSON, so the `< 20240114` dialect guard cannot come from
       the file. Read it from a co-present `metadata.epub.lua` if there is one, otherwise skip-with-warning
       on an unresolvable pointer rather than placing a highlight at a guessed offset
@@ -673,5 +680,11 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       `{filename, title, authors}` with every progress push (`getMetadata()`, `main.lua:693`). Not
       annotations — but consuming it would let us label progress rows whose hash matches no book, instead
       of showing an opaque hash
-- [ ] 13.12 UI, once data exists: a badge on the book card opening a per-book list (`chapter`, `datetime`,
-      `text`, optional `note`), and the ranges drawn in the reader with a jump-to-position link
+- [x] 13.12 UI shipped: a badge on the cover opens a per-book list grouped by chapter (`text`, optional
+      `note`, page, timestamp), and each entry jumps into the book with the chapter's highlights drawn.
+      The reader fetches annotations itself, so they appear whenever a book is read
+- [ ] 13.13 Only `.json` is read, so a device configured for "use filename instead of hash" resolves
+      through a library search rather than an index -- fine for one file, worth revisiting if anyone
+      actually uses that option
+- [ ] 13.14 Bookmarks (a record with no `drawer`) are listed but never drawn, since there is no range to
+      draw. Consider a margin marker instead of silently omitting them

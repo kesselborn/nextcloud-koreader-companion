@@ -254,6 +254,28 @@ Two constraints worth recording before recommending it:
 The friction we can actually reduce is on our side — one connection page that states
 all three blocks with the exact values, rather than hoping the device unifies them.
 
+### What was measured, against a real export
+
+An 18-highlight export from a device was resolved against the same EPUB the device
+read, rather than trusted because it looked right:
+
+- **18/18 ranges reproduce the text the device stored beside them.** The two that
+  first appeared not to differed only by a space where KOReader joins two blocks.
+- **The uploaded file's name matched the hash our own indexer had already computed**
+  for the same bytes (`b169113d…`), independently of KOReader — so
+  `DocumentHashGenerator::generateBinaryHash()` reproduces `util.partialMD5` exactly,
+  and the join key is not a guess.
+- In the browser, all 18 convert to range CFIs with no failures, and five marks are
+  drawn on the chapter that has five. Only the displayed section's highlights exist
+  in the DOM at any moment; epub.js injects the rest through its `render` hook, so a
+  count of one on the opening page is correct rather than a bug.
+
+Worth knowing when debugging this: epub.js draws marks into a `marks-pane` SVG
+overlaid on the **host** document, not inside the book's iframe — looking for them in
+`iframe.contentDocument` finds nothing even when they are there. And Nextcloud
+cache-busts `js/` by app version, which does not change between dev builds, so a
+browser check has to disable its cache or it will test the previous bundle.
+
 ### What the JSON loses
 
 `cre_dom_version` is **not** in it — only the annotation records are. The dialect
