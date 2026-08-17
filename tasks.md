@@ -651,7 +651,11 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       `<partialMD5>.json` using `util.partialMD5`, which is byte-identical to
       `DocumentHashGenerator::generateBinaryHash()` and to the `document` value kosync sends. Matching is
       an indexed lookup against `oc_koreader_hash_mapping` — no filename or title heuristics
-- [ ] 13.7 Location: `<library folder>/.koreader-annotations/`, derived rather than configured — the
+- [x] 13.7a Read the **library folder itself** as well, not only the subfolder. The first version only
+      looked in `.koreader-annotations/`, which assumed the user would create and select a subfolder;
+      in practice the plugin's folder picker makes the library folder the obvious choice, and files
+      landed there and were silently ignored. Library folder wins a collision, being the live one
+- [x] 13.7 Location: `<library folder>/.koreader-annotations/`, derived rather than configured — the
       library folder is already ours, `.json` is outside `SUPPORTED_EXTENSIONS` so nothing needs
       excluding, and a second user-supplied path would be a second chance at the `setFolder` traversal
       bug. Create it on demand and show the full WebDAV address in the connection settings; note in the

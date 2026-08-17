@@ -195,13 +195,19 @@ The plugins write **one flat folder for the whole library**, not a file beside e
 book — so the layout of the library itself (`Author/Book/file.epub` or anything else)
 is irrelevant. One folder, per user.
 
-Proposal: derive it from the library folder rather than adding a setting.
+Derived from the library folder rather than configured. Two places are read:
 
 ```
-<library folder>/.koreader-annotations/
+<library folder>/                        <- what the plugin's picker makes obvious
+<library folder>/.koreader-annotations/  <- optional, if you want them out of the way
 ```
 
-Why this and not a configurable path:
+The library folder itself is the one that matters. The first version only read the
+subfolder, which was a bad assumption: the folder is chosen in the plugin's picker
+on the device, and picking the library folder is the natural thing to do there. On a
+collision the library folder wins, being the one a device is actively writing to.
+
+Why derived and not a configurable path:
 
 - The library folder is already a setting we own, so this needs no new configuration
   and no new path validation — `setFolder`'s traversal handling was already one 500

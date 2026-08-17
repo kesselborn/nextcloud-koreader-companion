@@ -111,15 +111,19 @@ What works is a third-party plugin that uploads a file per book, and WebDAV is o
 2. Create an **app password** in Nextcloud under *Security → Devices & sessions*.
 3. Point the plugin's cloud storage at your Nextcloud:
    - address `https://<your-host>/remote.php/dav/files/<username>/`
-   - folder `<your library folder>/.koreader-annotations/`
+   - folder: **your library folder** (the one this app is pointed at, e.g. `/eBooks/`)
 4. Sync a book. Its highlights then appear as a badge on the cover, and in the reader.
 
 Notes:
 
-- The folder is derived from your library folder, so there is nothing to configure in this app. It is
-  created on demand; you can also create it from the device, since the plugin can issue `MKCOL`.
-- **KOReader's cloud browser will show the folder as empty.** It filters files through
-  `DocumentRegistry:hasProvider()`, so `.json` files are invisible to it. That is expected.
+- Nothing to configure in this app: it reads the library folder it already knows about. The uploaded
+  files sit alongside your books rather than next to each one, because the plugin writes one flat
+  folder for the whole library — so however your books are organised is irrelevant.
+- A `.koreader-annotations/` subfolder is also read, if you would rather keep them out of the way. It
+  is hidden, so the Files app only shows it with *Show hidden files* enabled. If the same file exists
+  in both, the one in the library folder wins — that is the one a device is actively writing.
+- **KOReader's cloud browser will not show the `.json` files.** It filters files through
+  `DocumentRegistry:hasProvider()`, so they are invisible to it even when they are there. Expected.
 - Leave the plugin's own *reading progress* sync off. Progress belongs to this app's `/sync` endpoints,
   and two sources for one position is how two devices start disagreeing about where you are.
 - Bookmarks are listed but not drawn — a bookmark is a point, not a range.

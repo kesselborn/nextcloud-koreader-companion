@@ -45,13 +45,14 @@ curl -sf -u "$USER:$PASS" "$BASE_URL$href" -o "$work/book.epub"
 fixture=$(python3 "$(dirname "$0")/annotations-fixture.py" "$work/book.epub" --out-dir "$work")
 hash_name=$(basename "$fixture")
 
-curl -s -u "$USER:$PASS" -X MKCOL "$DAV/$LIBRARY/.koreader-annotations" -o /dev/null
-curl -sf -u "$USER:$PASS" -T "$fixture" "$DAV/$LIBRARY/.koreader-annotations/$hash_name" -o /dev/null
+# Into the library folder itself, which is where a device's own folder picker
+# puts them.
+curl -sf -u "$USER:$PASS" -T "$fixture" "$DAV/$LIBRARY/$hash_name" -o /dev/null
 
 count=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$fixture")
 
 echo
-echo "Seeded $count highlights as .koreader-annotations/$hash_name"
+echo "Seeded $count highlights as $LIBRARY/$hash_name"
 echo
 echo "The book needs a hash mapping for the join to work:"
 echo "  make occ ARGS=koreader:generate-hashes"

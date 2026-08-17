@@ -124,51 +124,82 @@ class AnnotationService {
     /**
      * The uploaded files, keyed by the filename with `.json` removed.
      *
+     * The library folder itself is read, plus `.koreader-annotations/` if it
+     * exists. The folder is chosen in the plugin's own picker on the device, and
+     * picking the library folder is the obvious thing to do there -- so that is
+     * the case to support, not a subfolder the user has to think about.
+     *
+     * On a name collision the library folder wins, because it is read last: if
+     * the same hash exists in both, the one the device is actively writing to is
+     * the one to trust, not a leftover in a folder nobody synced to since.
+     *
      * @return array<string, \OCP\Files\File>
      */
     private function annotationFiles(string $userId): array {
-        $folder = $this->annotationFolder($userId);
-        if ($folder === null) {
-            return [];
-        }
-
         $files = [];
 
-        foreach ($folder->getDirectoryListing() as $node) {
-            $name = $node->getName();
+        foreach ($this->annotationFolders($userId) as $folder) {
+            foreach ($folder->getDirectoryListing() as $node) {
+                $name = $node->getName();
 
-            if (!$node instanceof \OCP\Files\File || !str_ends_with($name, '.json')) {
-                continue;
+                if (!$node instanceof \OCP\Files\File || !str_ends_with($name, '.json')) {
+                    continue;
+                }
+
+                // The plugin writes progress next to the annotations. Progress is
+                // kosync's job and already works; a second source for the same
+                // position is how positions start disagreeing.
+                if (str_ends_with($name, '.progress.json')) {
+                    continue;
+                }
+
+                $files[substr($name, 0, -strlen('.json'))] = $node;
             }
-
-            // The plugin writes progress next to the annotations. Progress is
-            // kosync's job and already works; a second source for the same
-            // position is how positions start disagreeing.
-            if (str_ends_with($name, '.progress.json')) {
-                continue;
-            }
-
-            $files[substr($name, 0, -strlen('.json'))] = $node;
         }
 
         return $files;
     }
 
-    private function annotationFolder(string $userId): ?Folder {
+    /**
+     * Where to look, most deliberate first.
+     *
+     * Only these two: a recursive search would turn every request into a walk of
+     * the whole library, and would happily pick up unrelated JSON a user keeps
+     * among their books.
+     *
+     * @return \OCP\Files\Folder[]
+     */
+    private function annotationFolders(string $userId): array {
+        $library = $this->libraryFolder($userId);
+        if ($library === null) {
+            return [];
+        }
+
+        $folders = [];
+
+        try {
+            $dedicated = $library->get(self::FOLDER_NAME);
+            if ($dedicated instanceof Folder) {
+                $folders[] = $dedicated;
+            }
+        } catch (\Throwable $e) {
+            // Never created, which is fine -- the library itself is still read.
+        }
+
+        $folders[] = $library;
+
+        return $folders;
+    }
+
+    private function libraryFolder(string $userId): ?Folder {
         try {
             $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
             $library = $this->rootFolder->getUserFolder($userId)->get($folderName);
 
-            if (!$library instanceof Folder) {
-                return null;
-            }
-
-            $annotations = $library->get(self::FOLDER_NAME);
-
-            return $annotations instanceof Folder ? $annotations : null;
+            return $library instanceof Folder ? $library : null;
         } catch (\Throwable $e) {
-            // Not configured yet, or the user never set annotation sync up. Both
-            // mean "no annotations", not an error worth surfacing.
+            // Not configured yet, or the folder is gone. Both mean "no
+            // annotations", not an error worth surfacing.
             return null;
         }
     }
@@ -206,16 +237,14 @@ class AnnotationService {
     }
 
     private function fileIdForName(string $userId, string $name): ?int {
+        $library = $this->libraryFolder($userId);
+        if ($library === null) {
+            return null;
+        }
+
         // The name is the book's own filename, so ask the library for it rather
         // than pattern-matching paths.
         try {
-            $folderName = $this->config->getValueString($userId, 'koreader_companion', 'folder', 'eBooks');
-            $library = $this->rootFolder->getUserFolder($userId)->get($folderName);
-
-            if (!$library instanceof Folder) {
-                return null;
-            }
-
             foreach ($library->search($name) as $node) {
                 if ($node->getName() === $name) {
                     return $node->getId();
