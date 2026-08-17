@@ -657,16 +657,21 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       bug. Create it on demand and show the full WebDAV address in the connection settings; note in the
       docs that KOReader's browser filters files through `DocumentRegistry:hasProvider()`, so the folder
       looks empty on the device even when full
-- [ ] 13.8 Parse the uploaded JSON — **not** Lua, which drops the parser problem entirely. Two shapes to
+- [ ] 13.8 Do **not** expect KOReader's shared "Cloud storage+" account list to unify our setup: OPDS
+      keeps its own catalog list (zero `cloudstorage` references in `plugins/opds.koplugin/`) and kosync
+      its own server plus a deliberately separate password. It also only exists on dev/nightly builds.
+      Reduce the friction on our side instead — one connection page stating all three blocks with copyable
+      values and a link to create an app password
+- [ ] 13.9 Parse the uploaded JSON — **not** Lua, which drops the parser problem entirely. Two shapes to
       accept: an object keyed by `pos0||pos1` (AnnotationSync) and a bare array (highlightsync); records
       are the sidecar's own, so `pos0`/`pos1` survive. Extend the position conversion to build a
       **range** CFI from `pos0`..`pos1` — the current one resolves single points only
-- [ ] 13.9 `cre_dom_version` is absent from the JSON, so the `< 20240114` dialect guard cannot come from
+- [ ] 13.10 `cre_dom_version` is absent from the JSON, so the `< 20240114` dialect guard cannot come from
       the file. Read it from a co-present `metadata.epub.lua` if there is one, otherwise skip-with-warning
       on an unresolvable pointer rather than placing a highlight at a guessed offset
-- [ ] 13.10 Unrelated but found while reading kosync: the **"Send document metadata"** toggle sends
+- [ ] 13.11 Unrelated but found while reading kosync: the **"Send document metadata"** toggle sends
       `{filename, title, authors}` with every progress push (`getMetadata()`, `main.lua:693`). Not
       annotations — but consuming it would let us label progress rows whose hash matches no book, instead
       of showing an opaque hash
-- [ ] 13.11 UI, once data exists: a badge on the book card opening a per-book list (`chapter`, `datetime`,
+- [ ] 13.12 UI, once data exists: a badge on the book card opening a per-book list (`chapter`, `datetime`,
       `text`, optional `note`), and the ranges drawn in the reader with a jump-to-position link

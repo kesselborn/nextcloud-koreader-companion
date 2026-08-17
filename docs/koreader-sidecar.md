@@ -224,6 +224,36 @@ a failure.
 The `.progress.json` companions land there too — a second progress source for books
 that never used kosync (see `last_xpointer` above).
 
+### The shared cloud config reaches WebDAV only
+
+The refactored `cloudstorage.koplugin` ("Cloud storage+") keeps one account list in
+`settings/cloudstorage.lua` under `cs_servers` and exposes `Cloud:sync(server, …)` to
+other plugins, which is how AnnotationSync picks an account
+(`remote.lua:16`, `widget.ui.cloudstorage`). Tempting as a single point of
+configuration — but it does not extend to our setup:
+
+- **OPDS keeps its own catalog list.** `grep -rn cloudstorage plugins/opds.koplugin/`
+  returns nothing. Different protocol, separate credentials.
+- **kosync keeps its own server, username and password**
+  (`self.settings.custom_server`, `userkey`) — and ours is deliberately a *separate*
+  password, since the protocol puts an MD5 of it on the wire.
+
+So a device still needs three entries, and no upstream mechanism unifies them. What
+the shared list does buy is that the *one* WebDAV account serves annotations, book
+download and any future WebDAV consumer.
+
+Two constraints worth recording before recommending it:
+
+- It exists only in **dev/nightly** KOReader. On stable, AnnotationSync falls back to
+  the legacy `apps/cloudstorage/syncservice`, which holds its own per-plugin server
+  config — so the centralization benefit is nightly-only.
+- On stable, AnnotationSync's *progress* sync is greyed out entirely. Irrelevant here:
+  progress is kosync's job and already works. Do not let its overlap tempt anyone into
+  a second progress path.
+
+The friction we can actually reduce is on our side — one connection page that states
+all three blocks with the exact values, rather than hoping the device unifies them.
+
 ### What the JSON loses
 
 `cre_dom_version` is **not** in it — only the annotation records are. The dialect
