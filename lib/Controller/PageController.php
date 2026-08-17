@@ -1,6 +1,7 @@
 <?php
 namespace OCA\KoreaderCompanion\Controller;
 
+use OCA\KoreaderCompanion\Service\AnnotationService;
 use OCA\KoreaderCompanion\Service\BookService;
 use OCA\KoreaderCompanion\Service\DocumentHashGenerator;
 use OCA\KoreaderCompanion\Service\FilenameService;
@@ -61,7 +62,8 @@ class PageController extends Controller {
         IInitialState $initialState,
         LoggerInterface $logger,
         private SyncPasswordService $syncPasswords,
-        private ReadingProgressService $readingProgress
+        private ReadingProgressService $readingProgress,
+        private AnnotationService $annotations
     ) {
         parent::__construct($appName, $request);
         $this->bookService = $bookService;
@@ -548,6 +550,51 @@ class PageController extends Controller {
         }
 
         return new JSONResponse(['progress' => $this->readingProgress->find($user->getUID(), (int)$id)]);
+    }
+
+    /**
+     * Highlights and notes a device uploaded for one book.
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[UserRateLimit(limit: 120, period: 60)]
+    public function bookAnnotations($id) {
+        $user = $this->userSession->getUser();
+        if (!$user) {
+            return new JSONResponse(['error' => 'Not logged in'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        if (!is_numeric($id)) {
+            return new JSONResponse(['error' => 'Invalid book ID'], Http::STATUS_BAD_REQUEST);
+        }
+
+        return new JSONResponse([
+            'annotations' => $this->annotations->forBook($user->getUID(), (int)$id),
+        ]);
+    }
+
+    /**
+     * Annotation counts for a set of books, for the badge on each cover.
+     *
+     * Batched on purpose: reading the folder once for a page of books beats one
+     * directory listing per cover.
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[UserRateLimit(limit: 120, period: 60)]
+    public function annotationCounts() {
+        $user = $this->userSession->getUser();
+        if (!$user) {
+            return new JSONResponse(['error' => 'Not logged in'], Http::STATUS_UNAUTHORIZED);
+        }
+
+        $ids = array_filter(
+            array_map('intval', explode(',', (string)$this->request->getParam('ids', ''))),
+        );
+
+        return new JSONResponse([
+            'counts' => $this->annotations->countsFor($user->getUID(), array_values($ids)),
+        ]);
     }
 
     /**
