@@ -108,7 +108,7 @@ OC.L10N.register(
         "Publication date": "Erscheinungsdatum",
         "Publisher": "Verlag",
         "Queued for processing": "Zur Verarbeitung eingereiht",
-        "Read": "Lesen",
+        "Read {title}": "{title} lesen",
         "Reading details…": "Details werden gelesen …",
         "Reading position saved": "Leseposition gespeichert",
         "Rename all existing books now": "Alle vorhandenen Bücher jetzt umbenennen",

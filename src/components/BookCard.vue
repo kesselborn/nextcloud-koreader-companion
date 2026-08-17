@@ -30,32 +30,22 @@
 				<div class="book__progress-fill" :style="{ width: percentage + '%' }" />
 			</div>
 
-			<!-- Only shown for books that actually have highlights, so an empty
-			     library never grows a row of zeroes. -->
+			<!-- The cover is the way into the book, so the whole of it is the
+			     button rather than a small icon. A real <button> layered over the
+			     art, not a click handler on the div: this is an action, and it has
+			     to be reachable by keyboard and announced as one. It cannot wrap the
+			     cover, because the action buttons live inside and a button may not
+			     contain buttons. -->
 			<button
-				v-if="annotationCount > 0"
+				v-if="readable && !pending"
 				type="button"
-				class="book__annotations"
-				:title="annotationsTitle"
-				:aria-label="annotationsTitle"
-				@click="$emit('annotations')">
-				<Marker :size="16" />
-				<span>{{ annotationCount }}</span>
-			</button>
+				class="book__open"
+				:aria-label="t('koreader_companion', 'Read {title}', { title: book.title })"
+				@click="$emit('read')" />
 
-			<!-- Action buttons always visible on the cover, not hidden behind a
-			     kebab menu. Edit and Delete are the two things people look for. -->
+			<!-- Revealed on hover so the art is unobstructed, but kept for keyboard
+			     users via :focus-within and for touch, where hover never happens. -->
 			<div v-if="!pending" class="book__actions">
-				<NcButton
-					v-if="readable"
-					:aria-label="t('koreader_companion', 'Read')"
-					type="tertiary-no-background"
-					class="book__action-btn"
-					@click="$emit('read')">
-					<template #icon>
-						<BookOpenPageVariant :size="18" />
-					</template>
-				</NcButton>
 				<NcButton
 					:aria-label="t('koreader_companion', 'Edit')"
 					type="tertiary-no-background"
@@ -73,6 +63,20 @@
 					:download="book.name">
 					<template #icon>
 						<Download :size="18" />
+					</template>
+				</NcButton>
+				<!-- Only for books that actually have highlights, so an empty library
+				     never grows a column of zeroes. -->
+				<NcButton
+					v-if="annotationCount > 0"
+					:aria-label="annotationsTitle"
+					:title="annotationsTitle"
+					:data-count="annotationCount"
+					type="tertiary-no-background"
+					class="book__action-btn book__action-btn--counted"
+					@click="$emit('annotations')">
+					<template #icon>
+						<Marker :size="18" />
 					</template>
 				</NcButton>
 			</div>
@@ -108,7 +112,6 @@
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import BookOpenPageVariant from 'vue-material-design-icons/BookOpenPageVariant.vue'
 import BookOpenVariant from 'vue-material-design-icons/BookOpenVariantOutline.vue'
 import Download from 'vue-material-design-icons/Download.vue'
 import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
@@ -126,7 +129,6 @@ export default {
 	name: 'BookCard',
 
 	components: {
-		BookOpenPageVariant,
 		BookOpenVariant,
 		Download,
 		FilePdfBox,
@@ -319,34 +321,22 @@ export default {
 		background-color: var(--color-primary-element);
 	}
 
-	// Bottom-inline-start, so it never collides with the action buttons in the
-	// opposite corner.
-	&__annotations {
+	// The whole cover opens the book. Sits under the action buttons, which is why
+	// they still receive their own clicks.
+	&__open {
 		position: absolute;
-		inset-block-end: calc(var(--default-grid-baseline) * 2);
-		inset-inline-start: calc(var(--default-grid-baseline) * 2);
-		z-index: 1;
-		display: flex;
-		align-items: center;
-		gap: 2px;
-		padding: 2px 6px 2px 4px;
+		inset: 0;
+		z-index: 0;
+		appearance: none;
+		background: none;
 		border: 0;
-		border-radius: var(--border-radius-pill, 16px);
-		background-color: var(--color-primary-element);
-		color: var(--color-primary-element-text);
-		font-size: .8em;
-		font-weight: bold;
+		padding: 0;
 		cursor: pointer;
-		opacity: .9;
-
-		&:hover,
-		&:focus-visible {
-			opacity: 1;
-		}
 
 		&:focus-visible {
-			outline: 2px solid var(--color-main-text);
-			outline-offset: 1px;
+			outline: 2px solid var(--color-primary-element);
+			outline-offset: -2px;
+			border-radius: var(--border-radius-large, 8px);
 		}
 	}
 
@@ -358,16 +348,54 @@ export default {
 		flex-direction: column;
 		gap: 2px;
 		z-index: 1;
+		opacity: 0;
+		transition: opacity .15s;
+	}
+
+	// Hover hides these from anyone without a pointer, so bring them back for
+	// keyboard focus and on touch, where hover never fires at all.
+	&__cover:hover &__actions,
+	&__cover:focus-within &__actions {
+		opacity: 1;
+	}
+
+	@media (hover: none) {
+		&__actions {
+			opacity: 1;
+		}
 	}
 
 	&__action-btn {
-		opacity: .7;
+		opacity: .8;
 		transition: opacity .15s;
 		color: white;
 		--button-size: 32px;
 
 		&:hover {
 			opacity: 1;
+		}
+	}
+
+	// The highlight count, as a corner bubble: the number is the reason to click,
+	// so it should not live only in the tooltip.
+	&__action-btn--counted {
+		position: relative;
+
+		&::after {
+			content: attr(data-count);
+			position: absolute;
+			inset-block-start: 0;
+			inset-inline-end: 0;
+			min-width: 14px;
+			padding-inline: 3px;
+			border-radius: var(--border-radius-pill, 8px);
+			background-color: var(--color-primary-element);
+			color: var(--color-primary-element-text);
+			font-size: 9px;
+			line-height: 14px;
+			font-weight: bold;
+			text-align: center;
+			pointer-events: none;
 		}
 	}
 
