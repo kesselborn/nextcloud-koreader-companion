@@ -1,10 +1,10 @@
 <template>
 	<NcModal
 		size="normal"
-		:name="book.title"
+		:label-id="titleId"
 		@close="$emit('close')">
 		<div class="annotations">
-			<h2 class="annotations__title">
+			<h2 :id="titleId" class="annotations__title">
 				{{ book.title }}
 				<span class="annotations__subtitle">{{ summary }}</span>
 			</h2>
@@ -106,6 +106,12 @@ export default {
 	},
 
 	computed: {
+		// NcModal labels itself from this element rather than painting a title of
+		// its own: its floating title bar sits at the top of the viewport, where it
+		// covered Nextcloud's search field and repeated the heading below it.
+		titleId() {
+			return `kc-annotations-title-${this.book.id}`
+		},
 		readable() {
 			return (this.book.format || '').toLowerCase() === 'epub'
 		},

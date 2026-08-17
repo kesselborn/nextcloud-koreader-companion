@@ -1,12 +1,12 @@
 <template>
 	<NcModal
 		size="full"
-		:name="book.title"
+		:label-id="titleId"
 		:close-button-contained="false"
 		@close="requestClose">
 		<div class="reader">
 			<div class="reader__header">
-				<span class="reader__title">{{ book.title }}</span>
+				<span :id="titleId" class="reader__title">{{ book.title }}</span>
 				<span v-if="chapter" class="reader__chapter">{{ chapter }}</span>
 				<!-- Say so when the book was opened somewhere the reader did not
 				     leave it: being moved without explanation is disorienting. -->
@@ -205,6 +205,12 @@ export default {
 	},
 
 	computed: {
+		// NcModal labels itself from the title we already render, instead of painting
+		// its own floating one over Nextcloud's header.
+		titleId() {
+			return `kc-reader-title-${this.book.id}`
+		},
+
 		/**
 		 * Percentage always; page numbers once they are known.
 		 *
@@ -282,7 +288,10 @@ export default {
 					width: '100%',
 					height: '100%',
 					flow: 'paginated',
-					spread: 'auto',
+					// One page at a time, never a two-page spread. 'auto' turns a wide
+					// window into a facing-pages layout, which on a desktop monitor
+					// means very long lines and a lot of eye travel per page.
+					spread: 'none',
 					// SECURITY -- load-bearing, do not flip to true.
 					//
 					// An EPUB is a zip of arbitrary XHTML, and it is attacker-supplied:
@@ -714,6 +723,12 @@ export default {
 		flex: 1;
 		height: 100%;
 		min-width: 0;
+		// A single page fills the whole window, and on a wide monitor that is a
+		// 200-character line. Cap it at a readable measure and centre it; epub.js
+		// lays out to whatever this element's width is, and the ResizeObserver
+		// already relays changes.
+		max-width: 46em;
+		margin-inline: auto;
 		// The book brings its own typography on a light page; forcing the
 		// Nextcloud dark theme onto arbitrary EPUB CSS produces unreadable
 		// combinations far more often than it helps.
