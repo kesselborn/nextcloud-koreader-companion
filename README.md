@@ -16,6 +16,8 @@ Feel free to use, fork, or contribute, but please understand the limitations.
 
 - OPDS-compatible ebook library from any Nextcloud folder
 - KOReader sync support for reading progress
+- In-browser EPUB reader that resumes where your device left off
+- Highlights and notes from KOReader, listed per book and drawn in the reader
 - Support for EPUB and PDF files
 - Secure authentication using Nextcloud credentials
 
@@ -95,6 +97,35 @@ next globally.
 
 If you would rather not wait, the library shows an **Extract metadata now** button whenever any book
 is still pending; it does the extraction in the request instead.
+
+### Syncing highlights and notes from KOReader
+
+KOReader cannot send annotations to a server by itself — the sync protocol has no field for them, and
+its built-in exporters are one-way and throw the positions away. Its **"Send document metadata"**
+option does not help either: that sends the filename, title and authors, nothing more.
+
+What works is a third-party plugin that uploads a file per book, and WebDAV is one of its targets:
+
+1. Install [`AnnotationSync.koplugin`](https://github.com/dani84bs/AnnotationSync.koplugin) into
+   `koreader/plugins/` on your device.
+2. Create an **app password** in Nextcloud under *Security → Devices & sessions*.
+3. Point the plugin's cloud storage at your Nextcloud:
+   - address `https://<your-host>/remote.php/dav/files/<username>/`
+   - folder `<your library folder>/.koreader-annotations/`
+4. Sync a book. Its highlights then appear as a badge on the cover, and in the reader.
+
+Notes:
+
+- The folder is derived from your library folder, so there is nothing to configure in this app. It is
+  created on demand; you can also create it from the device, since the plugin can issue `MKCOL`.
+- **KOReader's cloud browser will show the folder as empty.** It filters files through
+  `DocumentRegistry:hasProvider()`, so `.json` files are invisible to it. That is expected.
+- Leave the plugin's own *reading progress* sync off. Progress belongs to this app's `/sync` endpoints,
+  and two sources for one position is how two devices start disagreeing about where you are.
+- Bookmarks are listed but not drawn — a bookmark is a point, not a range.
+- Highlights written by a KOReader older than DOM version `20240114` may not resolve, because
+  crengine changed how it counts spine items. Those are skipped rather than placed at a guess.
+  [`docs/koreader-sidecar.md`](docs/koreader-sidecar.md) has the details.
 
 ## Local development
 

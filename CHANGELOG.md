@@ -5,7 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.0] - 2026-08-17
+
+### Added — highlights and notes from your device
+- KOReader cannot send annotations anywhere on its own: the sync protocol has no
+  field for them and every built-in exporter is one-way and drops the positions.
+  What it can do, through
+  [AnnotationSync.koplugin](https://github.com/dani84bs/AnnotationSync.koplugin),
+  is upload one JSON file per book to cloud storage — and Nextcloud is reachable
+  as WebDAV. Point the plugin at
+  `<library folder>/.koreader-annotations/` and your highlights appear in the app
+- A badge on the cover opens a per-book list grouped by chapter, with the quoted
+  passage, your note if there is one, the page and when you made it
+- "Show in book" opens the reader at that passage, with the chapter's highlights
+  drawn in the device's own colour. The reader loads them whenever a book is
+  opened, not only when it was opened from the list
+- Placement is exact rather than a text search, because the uploaded records keep
+  KOReader's `pos0`/`pos1` pointers. Verified against a real 18-highlight export:
+  every range reproduces the text the device stored beside it
+- The uploaded files are named after the same document hash the sync protocol
+  uses, so a file is matched to a book through an indexed lookup — no filename or
+  title guessing. `GET /books/{id}/annotations` and `GET /annotations/counts`
+- `.progress.json` companions are deliberately ignored. Reading progress is the
+  sync API's job, and a second source for the same position is how two devices
+  start disagreeing about where you are
 
 ### Added — in-browser EPUB reader
 - Read button on every EPUB cover opens a full-screen reader built on
