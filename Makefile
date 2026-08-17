@@ -34,6 +34,7 @@ BASE_URL          ?= http://localhost:$(APP_PORT)
 
 .PHONY: help dev up down logs occ cron shell shell-www reset seed provision test \
         composer install clean appstore sign release nc31-up nc31-down nc31-provision \
+        seed-annotations \
         mysql-up mysql-down mysql-provision npm-install frontend watch l10n
 
 help: ## Show this help
@@ -81,6 +82,13 @@ provision: ## Configure Nextcloud for dev, enable the app, seed sample books
 
 seed: ## Generate sample books and upload them via WebDAV
 	./dev/seed.sh
+
+# The pointers are generated against the actual EPUB, so they resolve and the
+# highlights really draw -- fabricated ones would exercise the badge and the list
+# but not the half that can break.
+seed-annotations: ## Seed device-shaped highlights for a library EPUB (MATCH=Moby)
+	./dev/seed-annotations.sh $(MATCH)
+	@$(OCC) koreader:generate-hashes | tail -4
 
 reset: ## Destroy containers AND volumes, and drop generated fixtures
 	$(DC) --profile nc31 --profile mysql down -v --remove-orphans

@@ -219,6 +219,36 @@ To see what the current breakage looks like against a version the app still supp
 make nc31-up && make nc31-provision   # second stack on http://localhost:8091
 ```
 
+
+### Testing the highlight feature locally
+
+There is no need for an e-reader. `make seed-annotations` downloads an EPUB from the dev library,
+generates an annotation file against **that exact file** -- so the pointers resolve and the highlights
+really draw -- and uploads it under the partial MD5 a device would have used:
+
+```bash
+make seed                       # sample books, if the library is empty
+make seed-annotations           # first EPUB in the library
+make seed-annotations MATCH=Moby
+```
+
+Then reload the app: the cover carries a badge, the badge opens the list, and "Show in book" jumps into
+the reader with the highlights drawn.
+
+Two things that will waste your time otherwise:
+
+- **Nextcloud caches routes and cache-busts `js/` by app version.** A new route or a rebuilt bundle is
+  invisible until the version changes, so keep DevTools' *Disable cache* on and run
+  `docker compose restart app` after touching `appinfo/routes.php`.
+- **epub.js draws highlights into a `marks-pane` SVG overlaid on the host document**, not inside the
+  book's iframe. Looking for them in `iframe.contentDocument` finds nothing even when they are there.
+
+After bumping the app version, the instance goes into upgrade mode and answers 503 until:
+
+```bash
+make occ ARGS=upgrade
+```
+
 ## License
 
 AGPL-3.0-or-later
