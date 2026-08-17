@@ -1,7 +1,7 @@
 # KOReader Companion
 
-Turn a Nextcloud folder into an OPDS library, a KOReader sync server and a reader — with the
-highlights you made on your e-reader shown alongside the books.
+An OPDS catalogue, a KOReader sync server and an EPUB reader for books stored in a Nextcloud folder.
+Highlights made on a KOReader device can be listed and shown in the reader.
 
 ## Personal Development Project
 
@@ -13,56 +13,63 @@ highlights you made on your e-reader shown alongside the books.
 
 Feel free to use, fork, or contribute, but please understand the limitations.
 
-## What it does
+## Features
 
-Your ebooks stay ordinary files in an ordinary Nextcloud folder. This app adds four things on top.
+The books stay ordinary files in an ordinary Nextcloud folder.
 
-### Your library, in the browser and on your reader
+### Catalogue
 
-![The library, with a highlight count on a cover](docs/img/library-with-highlight-badge.webp)
+<a href="docs/img/library-with-highlight-badge.webp"><img src="docs/img/library-with-highlight-badge.webp" alt="The library, with a highlight count on a cover" width="33%"></a>
 
-An **OPDS 1.2 catalogue** any reader app can browse — KOReader, but also anything else that speaks
-OPDS. Browse by author, series, genre or language, search, and download. It authenticates with your
-Nextcloud credentials through Nextcloud's own login, so app passwords, LDAP and two-factor all work.
+- OPDS 1.2 feed over a folder of your choice, readable by any OPDS client
+- Browse by author, series, genre, format or language; search
+- Authentication goes through Nextcloud's own login, so app passwords, LDAP and two-factor work
+- EPUB, PDF, CBZ, CBR
+- Web UI with search, sorting, and covers showing progress and the device that reported it
 
-Covers show how far you have read and which device reported it. EPUB, PDF, CBZ and CBR.
+### Reading progress
 
-### Reading progress that follows you
+<a href="docs/img/save-reading-position.webp"><img src="docs/img/save-reading-position.webp" alt="Saving your position back to your devices" width="33%"></a>
 
-![Saving your position back to your devices](docs/img/save-reading-position.webp)
+- Implements KOReader's `kosync` protocol; the device's *Progress sync* screen works unmodified
+- Positions are stored as KOReader position pointers rather than percentages, so a device resumes
+  at the same word
+- Uses a separate sync password, because the protocol sends an MD5 of it in a header
 
-The app speaks KOReader's own sync protocol, so *Progress sync* on the device works against your
-server with nothing patched. Positions travel as KOReader's own position pointers rather than
-percentages, so a device resumes on the exact word — not somewhere on the right page.
+### Reader
 
-### A reader in the browser
+<a href="docs/img/reader-resumes-device-position.webp"><img src="docs/img/reader-resumes-device-position.webp" alt="The reader resuming where a device left off" width="33%"></a>
 
-![The reader resuming where a device left off](docs/img/reader-resumes-device-position.webp)
+- EPUB only, in the browser, no download
+- Opens at the position last synced from a device and names that device
+- Single page, page numbers, adjustable font size, keyboard paging
+- On closing, asks whether to save the new position; it is not written unless you say so
+- Book content runs in a sandboxed frame without script permission
 
-Open any EPUB without downloading it. It starts where your device left off and says so. Page
-numbers, font size, keyboard paging. When you close it, it *offers* to push your new position back
-to your devices — it never moves them silently.
+### Highlights and notes
 
-### The highlights you made on your e-reader
+<a href="docs/img/highlights-list.webp"><img src="docs/img/highlights-list.webp" alt="Highlights and notes, grouped by chapter" width="33%"></a>
 
-![Highlights and notes, grouped by chapter](docs/img/highlights-list.webp)
+- Reads the annotation files `AnnotationSync.koplugin` uploads over WebDAV — this needs a plugin
+  installed on the device, see [step 3](#3-highlights-and-notes)
+- A count on the cover opens a per-book list, grouped by chapter, with the note, page and timestamp
 
-A badge on the cover opens everything you marked in that book, grouped by chapter, with your notes.
+<a href="docs/img/reader-with-highlights.webp"><img src="docs/img/reader-with-highlights.webp" alt="A highlight drawn in the reader" width="33%"></a>
 
-![A highlight drawn in the reader](docs/img/reader-with-highlights.webp)
+- *Show in book* opens the reader at that passage; the chapter's highlights are drawn in the colour
+  used on the device
+- Placement uses the device's own position data, not a text search, so repeated phrases are not
+  marked in the wrong place
+- Bookmarks are listed but not drawn — a bookmark is a point, not a range
 
-**Show in book** jumps into the reader at that passage, with the chapter's highlights drawn in the
-colour you used on the device. Placement is exact, not a text search — the device's own position
-data is preserved, so a repeated phrase is never marked in the wrong place.
+### Library management
 
-This one needs a plugin on the device; see [step 3](#3-highlights-and-notes) below.
+<a href="docs/img/edit-book-details.webp"><img src="docs/img/edit-book-details.webp" alt="Editing a book's metadata" width="33%"></a>
 
-### Editing and housekeeping
-
-![Editing a book's metadata](docs/img/edit-book-details.webp)
-
-Upload from the browser, fix metadata, batch-rename files to a consistent pattern. EPUB details are
-read from the file itself in the background. No external services, no telemetry, no outbound calls.
+- Upload from the browser, edit metadata, batch-rename files to a consistent pattern
+- EPUB metadata is read from the file by a background job
+- PDF metadata comes from the filename, Calibre layouts included; PDFs get a placeholder cover
+- No external services, no telemetry, no outbound calls
 
 ## Requirements
 
