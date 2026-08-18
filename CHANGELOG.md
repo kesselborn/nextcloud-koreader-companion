@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-08-18
+
+Everything user-visible here is a fix to 1.5.0, which was never released.
+
+### Fixed
+- **Highlights are read from the library folder itself**, not only from a
+  `.koreader-annotations/` subfolder. The folder is chosen in the plugin's own
+  picker on the device, where selecting the library folder is the obvious thing
+  to do — and files landing there were silently ignored, so the feature did
+  nothing at all for that (normal) setup
+- **Two amplification paths**, both found by measuring rather than reading:
+  resolving annotations was linear in however many unrelated `.json` files sat
+  among the books (1.4 ms each, so 150 of them turned a 0.052 s request into
+  0.260 s, on every library page load); and an unknown sync hash re-hashed the
+  200 most recently touched books even when they already had a hash mapping
+  (0.34 s → 0.257 s, now the same as a known hash). See
+  [`docs/security-audit.html`](docs/security-audit.html)
+- The reader shows **one page at a time** instead of a two-page spread, at a
+  capped line width — a single page across a desktop window was a 200-character
+  line
+- Clicking a **cover** opens the book; the Read icon is gone and the action
+  buttons appear on hover, alongside the highlight count
+- The dialogs no longer paint a **second copy of their own title** over
+  Nextcloud's header
+
+### Added
+- `js/THIRD-PARTY-LICENSES.txt`, generated at build time: the bundler emitted
+  SPDX identifiers only, and BSD-2-Clause (epub.js) and Apache-2.0 (localforage)
+  ask for the licence text itself, not a reference to it
+- `make release` now verifies the tarball it just built — no AppleDouble
+  sidecars, no stale signature, no sourcemaps or dev dependencies, version
+  matching the manifest
+- `make seed-annotations` generates device-shaped highlights against a real book
+  in the dev library, so the feature can be exercised without an e-reader
+
+### Documentation
+- README rewritten for people installing the app rather than working on it, with
+  screenshots; the development material moved to
+  [`docs/development.md`](docs/development.md)
+- KOReader setup now covers all three channels, including the plugin the
+  highlights need
+
 ## [1.5.0] - 2026-08-17
 
 ### Added — highlights and notes from your device
