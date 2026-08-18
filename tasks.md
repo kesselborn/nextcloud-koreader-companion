@@ -708,9 +708,10 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       `lib/`; the deck said M2 was still open and that was stale
 - [x] 14.4 Cross-user isolation tested rather than reasoned about: a second account gets
       `{"counts":[]}`, `{"annotations":[]}`, `{"progress":null}`, 404 on the file and 412 on all writers
-- [ ] 14.5 **R1, residual:** no rate limit on the 15 OPDS or 3 sync endpoints — `BruteForceProtection`
-      throttles failed auth only, so valid credentials are unthrottled. Needs `AnonRateLimit` sized
-      against a real device before it lands, since KOReader pages through feeds and a NAT'd household
-      shares an IP
+- [x] 14.5 **R1 accepted, not fixed.** No rate limit on the 15 OPDS or 3 sync endpoints:
+      `BruteForceProtection` throttles failed auth only, so valid credentials are unthrottled. Owner's
+      decision on 2026-08-18 — unthrottled *authenticated* connections are acceptable, which is also the
+      property stock Nextcloud DAV has. Do not add `AnonRateLimit` here without asking: KOReader pages
+      through feeds and a NAT'd household shares one IP, so a limit sized wrong breaks real devices
 - [ ] 14.6 `batchRename` still renames synchronously in-request with a 0.5 s sleep per chunk (H1c);
       rate-limited to 2 per 5 min, job move still owed. Same as 8.2c

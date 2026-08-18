@@ -202,7 +202,7 @@
   <dl class="verdict">
     <div><dt>Ship publicly today</dt><dd class="n-ok">Yes<small>with two caveats below</small></dd></div>
     <div><dt>Blocking</dt><dd class="n-ok">0<small>the gate this deck named is closed</small></dd></div>
-    <div><dt>Residual</dt><dd class="n-warn">2<small>both credentialed, both bounded</small></dd></div>
+    <div><dt>Residual</dt><dd class="n-ok">1<small>bounded; R1 accepted</small></dd></div>
     <div><dt>Second pass</dt><dd class="n-ok">1<small>found and fixed, measured</small></dd></div>
   </dl>
 
@@ -212,11 +212,15 @@
       Most of this deck has since been implemented; the findings are kept in full because the reasoning
       is the point. <strong>Two things are still open, and one of them is the deployment gate.</strong>
     </p>
-    <pre><code><b>Still open &mdash; neither blocks a public deployment</b>
+    <pre><code><b>Accepted, not fixed</b>
   R1   no rate limit on the 15 OPDS or the 3 sync endpoints. They carry
        BruteForceProtection, which throttles failed auth only, so a client
-       holding valid credentials is unthrottled. Same property stock
-       Nextcloud DAV has, which is why this is a caveat and not a gate.
+       holding valid credentials is unthrottled. Accepted by the owner:
+       unthrottled authenticated connections are fine, and it is the same
+       property stock Nextcloud DAV has. Sizing a limit here is not free --
+       KOReader pages through feeds and a NAT'd household shares one IP.
+
+<b>Still open &mdash; does not block a public deployment</b>
   H1c  batchRename still renames synchronously in-request, with a 0.5 s
        sleep per chunk. Rate-limited to 2 per 5 min; the job move is owed.
 
