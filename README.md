@@ -10,6 +10,7 @@ Highlights made on a KOReader device can be listed and shown in the reader.
 - **No guarantees**: The app is provided as-is without warranty
 - **Limited support**: I may not be able to provide extensive support or handle feature requests
 - **Personal focus**: Development priorities are based on my own needs
+- kesselborn fork: **all AI generated commits, not (yet) manually reviewed, don't use on public instances**
 
 Feel free to use, fork, or contribute, but please understand the limitations.
 
@@ -31,7 +32,7 @@ The books stay ordinary files in an ordinary Nextcloud folder.
 
 <a href="docs/img/save-reading-position.webp"><img src="docs/img/save-reading-position.webp" alt="Saving your position back to your devices" width="33%"></a>
 
-- Implements KOReader's `kosync` protocol; the device's *Progress sync* screen works unmodified
+- Implements KOReader's `kosync` protocol; the device's _Progress sync_ screen works unmodified
 - Positions are stored as KOReader position pointers rather than percentages, so a device resumes
   at the same word
 - Uses a separate sync password, because the protocol sends an MD5 of it in a header
@@ -56,7 +57,7 @@ The books stay ordinary files in an ordinary Nextcloud folder.
 
 <a href="docs/img/reader-with-highlights.webp"><img src="docs/img/reader-with-highlights.webp" alt="A highlight drawn in the reader" width="33%"></a>
 
-- *Show in book* opens the reader at that passage; the chapter's highlights are drawn in the colour
+- _Show in book_ opens the reader at that passage; the chapter's highlights are drawn in the colour
   used on the device
 - Placement uses the device's own position data, not a text search, so repeated phrases are not
   marked in the wrong place
@@ -76,8 +77,8 @@ The books stay ordinary files in an ordinary Nextcloud folder.
 - Nextcloud 34
 - PHP 8.2+
 - **Working background jobs** — `occ background:cron` is recommended. Metadata extraction runs as a
-  background job, so without them books stay listed under their filename. (There is an *Extract
-  metadata now* button in the library for when you do not want to wait.)
+  background job, so without them books stay listed under their filename. (There is an _Extract
+  metadata now_ button in the library for when you do not want to wait.)
 
 ## Installing it in Nextcloud
 
@@ -90,7 +91,7 @@ make release        # -> build/artifacts/appstore/koreader_companion.tar.gz
 Then on the server:
 
 ```bash
-tar -xzf koreader_companion.tar.gz -C /path/to/nextcloud/custom_apps/
+tar -xzf koreader_companion.tar.gz -C /path/to/nextcloud/custom_apps/ # or the apps folder if custom_apps does not work
 chown -R www-data:www-data /path/to/nextcloud/custom_apps/koreader_companion
 
 sudo -u www-data php occ app:enable koreader_companion   # first install only
@@ -113,37 +114,37 @@ password** (at least 8 characters — this is not your Nextcloud password).
 ## Setting up KOReader
 
 Three things, configured in three places on the device, and independent of each other. All three
-want your Nextcloud user name and an **app password** (*Settings → Security → Devices & sessions*).
+want your Nextcloud user name and an **app password** (_Settings → Security → Devices & sessions_).
 
 Replace `https://cloud.example.com` with your own host.
 
 ### 1. The library
 
-*Main menu → OPDS catalog → add a catalogue*
+_Main menu → OPDS catalog → add a catalogue_
 
-| Field | Value |
-|---|---|
-| Catalog name | anything, e.g. `Nextcloud` |
-| Catalog URL | `https://cloud.example.com/apps/koreader_companion/opds` |
-| Username / Password | your user name and an app password |
+| Field               | Value                                                    |
+| ------------------- | -------------------------------------------------------- |
+| Catalog name        | anything, e.g. `Nextcloud`                               |
+| Catalog URL         | `https://cloud.example.com/apps/koreader_companion/opds` |
+| Username / Password | your user name and an app password                       |
 
 ### 2. Reading progress
 
-*Main menu → Progress sync → Custom sync server*
+_Main menu → Progress sync → Custom sync server_
 
-| Field | Value |
-|---|---|
+| Field              | Value                                                    |
+| ------------------ | -------------------------------------------------------- |
 | Custom sync server | `https://cloud.example.com/apps/koreader_companion/sync` |
-| Username | your Nextcloud user name |
-| Password | the **sync password** you set in the app |
+| Username           | your Nextcloud user name                                 |
+| Password           | the **sync password** you set in the app                 |
 
-Then choose **Login** — not *Register*. The account already exists; it is your Nextcloud one, so the
-server refuses registration on purpose. Turn on *Sync every N pages* to have it happen by itself.
+Then choose **Login** — not _Register_. The account already exists; it is your Nextcloud one, so the
+server refuses registration on purpose. Turn on _Sync every N pages_ to have it happen by itself.
 
 ### 3. Highlights and notes
 
 Stock KOReader cannot send annotations anywhere — its sync protocol has no field for them, and its
-exporters are one-way and drop the positions. (*Send document metadata* does not help either: that
+exporters are one-way and drop the positions. (_Send document metadata_ does not help either: that
 sends the filename, title and authors, nothing more.)
 
 [AnnotationSync.koplugin](https://github.com/dani84bs/AnnotationSync.koplugin) uploads one file per
@@ -151,15 +152,15 @@ book to cloud storage, and WebDAV is one of its targets — so it writes straigh
 
 1. Copy the `AnnotationSync.koplugin` folder into `koreader/plugins/` on the device, keeping that
    exact name. Restart KOReader and enable it from the plugins menu.
-2. *Tools → Annotation Sync → Settings → Cloud settings*, add a **WebDAV** server:
+2. _Tools → Annotation Sync → Settings → Cloud settings_, add a **WebDAV** server:
 
-   | Field | Value |
-   |---|---|
-   | Address | `https://cloud.example.com/remote.php/dav/files/<username>/` |
-   | Folder | your library folder, e.g. `/eBooks/` |
-   | Username / Password | your user name and an app password |
+   | Field               | Value                                                        |
+   | ------------------- | ------------------------------------------------------------ |
+   | Address             | `https://cloud.example.com/remote.php/dav/files/<username>/` |
+   | Folder              | your library folder, e.g. `/eBooks/`                         |
+   | Username / Password | your user name and an app password                           |
 
-3. Open a book, highlight something, then *Tools → Annotation Sync → Manual Sync*.
+3. Open a book, highlight something, then _Tools → Annotation Sync → Manual Sync_.
 
 Worth knowing before you go looking for a fault:
 
