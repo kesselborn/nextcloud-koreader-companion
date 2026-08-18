@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\KoreaderCompanion\Service;
 
 use OCP\Config\IUserConfig;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IDBConnection;
@@ -41,6 +42,12 @@ class AnnotationService {
      */
     private const MAX_ANNOTATIONS_PER_BOOK = 2000;
 
+    /**
+     * Books per counts request. The library asks for a page at a time; a caller
+     * asking about ten thousand is not the library.
+     */
+    private const MAX_BOOKS_PER_REQUEST = 250;
+
     /** Above this a file is not annotations, whatever its name says. */
     private const MAX_FILE_BYTES = 4 * 1024 * 1024;
 
@@ -65,21 +72,27 @@ class AnnotationService {
      * @return array<int, int> file id => count, absent when a book has none
      */
     public function countsFor(string $userId, array $fileIds): array {
+        $fileIds = array_slice(array_unique(array_map('intval', $fileIds)), 0, self::MAX_BOOKS_PER_REQUEST);
         if ($fileIds === []) {
             return [];
         }
 
-        $files = $this->annotationFiles($userId);
-        if ($files === []) {
+        // Resolve the names to look for *first*, in two queries, then read only
+        // the files that match one. The reverse -- resolving every file in the
+        // folder -- cost a query or a library-wide search per file, which is
+        // linear in however many stray .json files happen to sit among the books:
+        // measured at 1.4 ms each, so a thousand of them turned one request into
+        // 1.4 s. Now a file nobody asked about costs a hash-map lookup.
+        $names = $this->namesFor($userId, $fileIds);
+        if ($names === []) {
             return [];
         }
 
-        $wanted = array_flip(array_map('intval', $fileIds));
         $counts = [];
 
-        foreach ($files as $key => $file) {
-            $fileId = $this->resolveFileId($userId, $key);
-            if ($fileId === null || !isset($wanted[$fileId])) {
+        foreach ($this->annotationFiles($userId) as $key => $file) {
+            $fileId = $names[$key] ?? null;
+            if ($fileId === null) {
                 continue;
             }
 
@@ -98,8 +111,13 @@ class AnnotationService {
      * @return array<int, array<string, mixed>>
      */
     public function forBook(string $userId, int $fileId): array {
+        $names = $this->namesFor($userId, [$fileId]);
+        if ($names === []) {
+            return [];
+        }
+
         foreach ($this->annotationFiles($userId) as $key => $file) {
-            if ($this->resolveFileId($userId, $key) !== $fileId) {
+            if (($names[$key] ?? null) !== $fileId) {
                 continue;
             }
 
@@ -205,60 +223,54 @@ class AnnotationService {
     }
 
     /**
-     * Which book a file belongs to.
+     * The file names that would belong to these books: name => file id.
      *
-     * AnnotationSync names files after `util.partialMD5`, which is what
-     * DocumentHashGenerator computes and what the sync protocol sends as
-     * `document` -- so the default case is an indexed lookup. Its "use filename
-     * instead of hash" option writes `book.epub.json` instead, hence the
-     * fallback.
+     * Two shapes, because AnnotationSync offers two. By default it names files
+     * after `util.partialMD5`, which is the document id the sync protocol uses
+     * and is already in our mapping table. Its "use filename instead of hash"
+     * option writes `book.epub.json` instead, hence the second query.
+     *
+     * Both are batched and indexed. Doing this per file in the folder instead --
+     * which is what this did first -- meant a query or a library-wide search for
+     * every stray .json among the books.
+     *
+     * @param int[] $fileIds
+     * @return array<string, int>
      */
-    private function resolveFileId(string $userId, string $key): ?int {
-        if (preg_match('/^[0-9a-f]{32}$/', $key) === 1) {
-            return $this->fileIdForHash($userId, $key);
+    private function namesFor(string $userId, array $fileIds): array {
+        if ($fileIds === []) {
+            return [];
         }
 
-        return $this->fileIdForName($userId, $key);
-    }
+        $names = [];
 
-    private function fileIdForHash(string $userId, string $hash): ?int {
         $qb = $this->db->getQueryBuilder();
-        $result = $qb->select('em.file_id')
+        $result = $qb->select('hm.document_hash', 'em.file_id')
             ->from('koreader_hash_mapping', 'hm')
             ->innerJoin('hm', 'koreader_metadata', 'em', 'hm.metadata_id = em.id')
             ->where($qb->expr()->eq('hm.user_id', $qb->createNamedParameter($userId)))
-            ->andWhere($qb->expr()->eq('hm.document_hash', $qb->createNamedParameter($hash)))
-            ->setMaxResults(1)
+            ->andWhere($qb->expr()->in('em.file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)))
             ->executeQuery();
-        $fileId = $result->fetchOne();
+        foreach ($result->fetchAll() as $row) {
+            $names[(string)$row['document_hash']] = (int)$row['file_id'];
+        }
         $result->closeCursor();
 
-        return $fileId === false || $fileId === null ? null : (int)$fileId;
-    }
-
-    private function fileIdForName(string $userId, string $name): ?int {
-        $library = $this->libraryFolder($userId);
-        if ($library === null) {
-            return null;
-        }
-
-        // The name is the book's own filename, so ask the library for it rather
-        // than pattern-matching paths.
-        try {
-            foreach ($library->search($name) as $node) {
-                if ($node->getName() === $name) {
-                    return $node->getId();
-                }
+        $qb = $this->db->getQueryBuilder();
+        $result = $qb->select('file_id', 'file_path')
+            ->from('koreader_metadata')
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)))
+            ->executeQuery();
+        foreach ($result->fetchAll() as $row) {
+            $basename = basename((string)$row['file_path']);
+            if ($basename !== '') {
+                $names[$basename] = (int)$row['file_id'];
             }
-        } catch (\Throwable $e) {
-            $this->logger->debug('Could not resolve an annotation file by name', [
-                'app' => 'koreader_companion',
-                'name' => $name,
-                'exception' => $e,
-            ]);
         }
+        $result->closeCursor();
 
-        return null;
+        return $names;
     }
 
     /**

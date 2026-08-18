@@ -588,8 +588,12 @@ class PageController extends Controller {
             return new JSONResponse(['error' => 'Not logged in'], Http::STATUS_UNAUTHORIZED);
         }
 
-        $ids = array_filter(
-            array_map('intval', explode(',', (string)$this->request->getParam('ids', ''))),
+        // Bounded before it reaches the service: an unbounded id list is an
+        // unbounded query parameter, and the service caps again anyway.
+        $ids = array_slice(
+            array_filter(array_map('intval', explode(',', (string)$this->request->getParam('ids', '')))),
+            0,
+            500
         );
 
         return new JSONResponse([

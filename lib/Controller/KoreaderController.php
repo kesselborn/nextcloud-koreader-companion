@@ -451,11 +451,26 @@ class KoreaderController extends Controller {
             //
             // Hashing needs the file node and nothing else, so nothing here reads
             // file contents beyond the few kilobytes the hash samples.
+            //
+            // Only books that have no mapping yet are candidates. Indexing writes
+            // both hashes at the time it runs (BookService::createHashMappingsForFile),
+            // so on a healthy install this set is empty and an unknown hash costs
+            // one query and opens nothing. Without the filter every unknown hash
+            // re-hashed the 200 most recently touched books, mappings and all:
+            // measured at 6.5 ms per book, so ~1.3 s of file I/O per request that
+            // anyone holding sync credentials could repeat in a loop.
             $qb = $this->db->getQueryBuilder();
-            $result = $qb->select('id', 'file_id')
-                ->from('koreader_metadata')
-                ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
-                ->orderBy('updated_at', 'DESC')
+            $result = $qb->select('em.id', 'em.file_id')
+                ->from('koreader_metadata', 'em')
+                ->leftJoin(
+                    'em',
+                    'koreader_hash_mapping',
+                    'hm',
+                    $qb->expr()->eq('hm.metadata_id', 'em.id')
+                )
+                ->where($qb->expr()->eq('em.user_id', $qb->createNamedParameter($userId)))
+                ->andWhere($qb->expr()->isNull('hm.id'))
+                ->orderBy('em.updated_at', 'DESC')
                 ->setMaxResults(self::AUTO_INDEX_MAX_FILES)
                 ->executeQuery();
             $candidates = $result->fetchAll();
