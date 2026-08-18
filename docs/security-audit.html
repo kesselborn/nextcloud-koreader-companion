@@ -189,16 +189,21 @@
     plus anonymous internet traffic reaching <span class="m">/opds/*</span> and <span class="m">/sync/*</span>.
     On the classic vulnerability classes this code is <strong>better than most Nextcloud apps</strong>: every
     query is parameterised, file ownership is scoped through the user folder, and the new EPUB reader&rsquo;s
-    sandboxing is correct. The problem is somewhere less glamorous. <strong>Nothing rate-limits anything</strong>,
-    and several endpoints do unbounded work per request.
+    sandboxing is correct. The problem was somewhere less glamorous: <strong>nothing rate-limited
+    anything</strong>, and several endpoints did unbounded work per request.
+  </p>
+  <p class="standfirst">
+    That has since been addressed &mdash; findings are kept in full below because the reasoning is the
+    point, with each one&rsquo;s current status marked. A second pass over v1.5.0 (the reader, the
+    highlight list, the annotation endpoints) found one more amplification of the same family and closed
+    it. What remains is two credentialed, bounded items, neither of which gates a deployment.
   </p>
 
   <dl class="verdict">
-    <div><dt>Ship publicly today</dt><dd class="n-crit">Not yet<small>H1b still open</small></dd></div>
-    <div><dt>High</dt><dd class="n-warn">1<small>half fixed</small></dd></div>
-    <div><dt>Medium</dt><dd class="n-ok">5 of 6<small>fixed</small></dd></div>
-    <div><dt>Low</dt><dd class="n-ok">6 of 6<small>fixed</small></dd></div>
-    <div><dt>Injection / XSS / RCE</dt><dd class="n-ok">0<small>none found</small></dd></div>
+    <div><dt>Ship publicly today</dt><dd class="n-ok">Yes<small>with two caveats below</small></dd></div>
+    <div><dt>Blocking</dt><dd class="n-ok">0<small>the gate this deck named is closed</small></dd></div>
+    <div><dt>Residual</dt><dd class="n-warn">2<small>both credentialed, both bounded</small></dd></div>
+    <div><dt>Second pass</dt><dd class="n-ok">1<small>found and fixed, measured</small></dd></div>
   </dl>
 
   <div class="repro">
@@ -207,22 +212,30 @@
       Most of this deck has since been implemented; the findings are kept in full because the reasoning
       is the point. <strong>Two things are still open, and one of them is the deployment gate.</strong>
     </p>
-    <pre><code><b>Still open</b>
-  M2   IUserSession::setUser() from a header on a public route
+    <pre><code><b>Still open &mdash; neither blocks a public deployment</b>
+  R1   no rate limit on the 15 OPDS or the 3 sync endpoints. They carry
+       BruteForceProtection, which throttles failed auth only, so a client
+       holding valid credentials is unthrottled. Same property stock
+       Nextcloud DAV has, which is why this is a caveat and not a gate.
+  H1c  batchRename still renames synchronously in-request, with a 0.5 s
+       sleep per chunk. Rate-limited to 2 per 5 min; the job move is owed.
 
 <b>Fixed</b>
-  H1a  tryAutoIndex bounded to 200 files per request
-  H1b  getBookById() is now an indexed SQL lookup; the reconciliation
-       walk is throttled to once per 5 min per user
-  H1c  batchRename rate-limited (2 per 5 min); job move still owed
-  M1   sync password now stored under password_hash(), legacy MD5
-       accepted once and transparently upgraded; 8-char server-side floor
-  M3   composer audit + npm audit added to CI
+  M2   <b>the gate this deck named is gone.</b> IUserSession::setUser()
+       appears nowhere in lib/ any more; the sync routes pass the user id
+       explicitly and auto-indexing works from file ids
+  H1a  auto-indexing now considers only books with no hash mapping, so on
+       a healthy install an unknown hash opens no files at all
+  H1b  listings are DB-backed on every OPDS path; getBookById() is an
+       indexed lookup; the reconciliation walk is throttled to 5 min
+  H1c  rate-limited (2 per 5 min)
+  M1   sync password under password_hash(), legacy MD5 upgraded on use,
+       8-char server-side floor
+  M3   composer audit + npm audit in CI
   M4   generic client errors, exceptions logged not returned
   M5   server-side extension allow-list + 512 MB cap + filename sanitising
-  M6   folder setting validated (empty no longer resolves to the user root)
-  L1-L6  all six
-  plus  the metadata-revert bug, and an "Extract metadata now" button</code></pre>
+  M6   folder setting validated
+  L1-L6  all six; DocumentHashGenerator now logs 0 info, 21 debug</code></pre>
     <p class="note">
       <strong>Honest correction on H1b.</strong> The structural claim holds &mdash; a download no longer
       costs work proportional to the library &mdash; but the measured win is smaller than the finding
@@ -275,6 +288,97 @@ KoreaderController.php:141      $response->throttle(...)   # inside the 401 bran
     </p>
   </div>
 </header>
+
+<section>
+  <p class="eyebrow">Second pass &mdash; v1.5.0, the annotation surface</p>
+  <h2 class="sec-head">One new amplification, found by measuring rather than reading</h2>
+  <p>
+    The reader, the highlight list and the annotation endpoints did not exist when the review above was
+    written. Everything below was checked against a running instance; the numbers are measured, not
+    estimated.
+  </p>
+
+  <div class="find">
+    <span class="tag warn">A1</span>
+    <span class="what">Annotation lookup was linear in stray <span class="m">.json</span> files &mdash; <b>fixed</b></span>
+    <span class="when w">Authenticated</span>
+    <div class="where">
+      <p>
+        <span class="m">AnnotationService</span> resolved <em>every</em> <span class="m">.json</span> in the
+        library folder to a book before deciding whether it was wanted. A 32-hex name cost an indexed
+        query; anything else cost a library-wide <span class="m">Folder::search()</span>. Any user with
+        stray JSON among their books &mdash; a Calibre export, their own notes &mdash; paid for it on
+        <em>every</em> library page load, and <span class="m">/annotations/counts</span> allows 120 per
+        minute.
+      </p>
+      <pre><code>13-book library, counts request       before     after
+baseline, 1 annotation file          0.052 s    0.052 s
++ 150 stray .json files              0.260 s    0.054 s   (1.4 ms each, linear)
++ one 3.9 MB / 7451-record file      0.064 s    0.064 s   (caps already held)</code></pre>
+      <p>
+        Extrapolated, a thousand stray files meant 1.4 s per request &mdash; at 120 requests a minute,
+        more than one worker saturated by one user.
+      </p>
+    </div>
+    <p class="fix">
+      <b>Fixed:</b> resolve the wanted <em>names</em> first, in two batched indexed queries, then read
+      only files matching one. A file nobody asked about now costs a hash-map lookup. Requests are
+      bounded to 500 ids at the controller and 250 books in the service.
+    </p>
+  </div>
+
+  <div class="find">
+    <span class="tag ok">H1a</span>
+    <span class="what">Unknown sync hashes no longer open the library &mdash; <b>fixed</b></span>
+    <span class="when">Sync creds</span>
+    <div class="where">
+      <p>
+        The earlier fix bounded <span class="m">tryAutoIndex()</span> to 200 files, but did not exclude
+        books that already had a hash mapping &mdash; and indexing writes those mappings when it runs. So
+        every unknown hash re-hashed the 200 most recently touched books for nothing.
+      </p>
+      <pre><code>PUT /sync/syncs/progress    before     after
+unknown (random) hash       0.34 s     0.257 s
+known hash                  0.26 s     0.259 s   &larr; now identical</code></pre>
+      <p>
+        The delta was 6.5 ms per book on a 13-book library; at the 200-file cap that is ~1.3 s of file
+        I/O per request, repeatable in a loop by anyone holding sync credentials.
+        <b>Fixed</b> by making only unmapped rows candidates. Regression-checked: deleting a book&rsquo;s
+        mappings and syncing its real hash still finds it and recreates the mapping.
+      </p>
+    </div>
+  </div>
+
+  <p class="eyebrow" style="margin-top:40px">Cleared in this pass</p>
+  <p>
+    <b>Cross-user isolation, tested rather than reasoned about.</b> A second account asking about another
+    user&rsquo;s book, by file id, on every endpoint that takes one:
+  </p>
+  <pre><code>GET  /annotations/counts?ids=&hellip;   {"counts":[]}
+GET  /books/{id}/annotations         {"annotations":[]}
+GET  /books/{id}/progress            {"progress":null}
+GET  /books/{id}/file                404
+PUT  /books/{id}/metadata            412   (CSRF; ownership also scoped)
+PUT  /books/{id}/progress            412
+DELETE /books/{id}                   412</code></pre>
+  <p>
+    Readers and writers alike resolve through
+    <span class="m">getUserFolder($uid)-&gt;getById($id)</span>, and the annotation name map is scoped by
+    <span class="m">user_id</span> in both queries, so another user&rsquo;s id simply matches nothing.
+  </p>
+  <p>
+    Also re-verified: no <span class="m">v-html</span>, <span class="m">innerHTML</span> or
+    <span class="m">document.write</span> anywhere in <span class="m">src/</span>, so annotation text and
+    notes &mdash; attacker-authored, arriving from a file &mdash; are escaped by Vue on the way out. No SQL
+    is built by concatenation; the one hand-written fragment
+    (<span class="m">createFunction()</span> for the &ldquo;last updated&rdquo; sort) is a static string
+    reached only through an allow-listed <span class="m">switch</span>. The reader&rsquo;s sandbox still
+    holds: <span class="m">allowScriptedContent: false</span>, and the CSP widens
+    <span class="m">blob:</span> for frames, styles, fonts, images and media &mdash; never scripts.
+    Annotation files are capped at 4 MB, 2000 records and JSON depth 8, and the 3.9 MB probe above shows
+    those caps doing their job.
+  </p>
+</section>
 
 <section>
   <div class="sec-head">

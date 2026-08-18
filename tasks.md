@@ -692,3 +692,25 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       actually uses that option
 - [ ] 13.14 Bookmarks (a record with no `drawer`) are listed but never drawn, since there is no range to
       draw. Consider a margin marker instead of silently omitting them
+
+## Phase 14 — Second security pass (v1.5.0)
+
+- [x] 14.1 **Annotation lookup was linear in stray `.json` files.** `AnnotationService` resolved every
+      file in the folder before deciding whether it was wanted; non-hash names cost a library-wide
+      `Folder::search()` each. Measured 1.4 ms per stray file — 150 of them turned a 0.052 s counts
+      request into 0.260 s, and it ran on every library page load. Fixed by resolving the wanted names
+      first in two batched indexed queries; back to 0.054 s with the same 150 files
+- [x] 14.2 **Unknown sync hashes re-hashed 200 books for nothing.** `tryAutoIndex()` was bounded but did
+      not exclude books that already had a mapping, which indexing always writes. 0.34 s → 0.257 s for an
+      unknown hash, now identical to the known-hash path. Regression-checked by deleting a book's
+      mappings and syncing its real hash
+- [x] 14.3 **The deployment gate the audit named is gone.** `IUserSession::setUser()` appears nowhere in
+      `lib/`; the deck said M2 was still open and that was stale
+- [x] 14.4 Cross-user isolation tested rather than reasoned about: a second account gets
+      `{"counts":[]}`, `{"annotations":[]}`, `{"progress":null}`, 404 on the file and 412 on all writers
+- [ ] 14.5 **R1, residual:** no rate limit on the 15 OPDS or 3 sync endpoints — `BruteForceProtection`
+      throttles failed auth only, so valid credentials are unthrottled. Needs `AnonRateLimit` sized
+      against a real device before it lands, since KOReader pages through feeds and a NAT'd household
+      shares an IP
+- [ ] 14.6 `batchRename` still renames synchronously in-request with a 0.5 s sleep per chunk (H1c);
+      rate-limited to 2 per 5 min, job move still owed. Same as 8.2c
