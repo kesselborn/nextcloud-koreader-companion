@@ -52,13 +52,22 @@ function fromSidecars() {
  */
 function fromNpm() {
 	const found = new Map()
-	const json = execFileSync('npm', ['ls', '--omit=dev', '--all', '--json'], {
-		encoding: 'utf8',
-		maxBuffer: 64 * 1024 * 1024,
-		// npm exits non-zero on peer-dependency complaints while still printing a
-		// complete tree, which is all this needs.
-		stdio: ['ignore', 'pipe', 'ignore'],
-	})
+	// npm exits non-zero when it has anything to complain about -- a peer
+	// dependency mismatch, for instance -- while still printing the complete tree
+	// on stdout, which is all this needs. So take the output either way.
+	let json
+	try {
+		json = execFileSync('npm', ['ls', '--omit=dev', '--all', '--json'], {
+			encoding: 'utf8',
+			maxBuffer: 64 * 1024 * 1024,
+			stdio: ['ignore', 'pipe', 'ignore'],
+		})
+	} catch (error) {
+		json = error.stdout
+		if (!json) {
+			throw error
+		}
+	}
 
 	const walk = (node) => {
 		for (const [name, info] of Object.entries(node.dependencies || {})) {
@@ -96,7 +105,10 @@ const bundled = fromSidecars()
 const packages = new Map([...fromNpm(), ...bundled])
 packages.delete('koreader_companion')
 
-const sections = []
+// Grouped by identical licence text: GPL-3.0 alone is 35 kB and ten packages
+// here ship a byte-identical copy of it. One copy per distinct text, listing
+// everyone it covers, is both smaller and easier to read than 98 repetitions.
+const byText = new Map()
 const missing = []
 
 for (const name of [...packages.keys()].sort()) {
@@ -108,10 +120,20 @@ for (const name of [...packages.keys()].sort()) {
 		continue
 	}
 
-	for (const { file, text } of texts) {
-		sections.push(`${'='.repeat(78)}\n${name} ${version || ''} -- ${license || '?'} (${file})\n${'='.repeat(78)}\n\n${text}\n`)
+	for (const { text } of texts) {
+		if (!byText.has(text)) {
+			byText.set(text, [])
+		}
+		byText.get(text).push(`${name} ${version || ''} -- ${license || '?'}`)
 	}
 }
+
+const sections = [...byText.entries()]
+	.sort((a, b) => a[1][0].localeCompare(b[1][0]))
+	.map(([text, users]) => {
+		const rule = '='.repeat(78)
+		return `${rule}\n${users.map((u) => `  ${u}`).join('\n')}\n${rule}\n\n${text}\n`
+	})
 
 const header = `Third-party licences
 ====================
@@ -128,4 +150,4 @@ const footer = missing.length
 	: ''
 
 writeFileSync(OUT, `${header}\n${sections.join('\n')}${footer}`)
-console.log(`${OUT}: ${packages.size} packages, ${sections.length} licence files, ${missing.length} without text`)
+console.log(`${OUT}: ${packages.size} packages, ${sections.length} distinct licence texts, ${missing.length} without text`)

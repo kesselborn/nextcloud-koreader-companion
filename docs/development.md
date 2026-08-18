@@ -123,6 +123,28 @@ After bumping the app version, the instance goes into upgrade mode and answers 5
 make occ ARGS=upgrade
 ```
 
+## Licences
+
+The app is AGPL-3.0-or-later, which every dependency is compatible with: the PHP side is MIT plus
+smalot/pdfparser under LGPL-3.0, and the frontend is MIT/ISC/Apache-2.0/BSD-2-Clause plus the
+Nextcloud libraries under GPL-3.0-or-later and AGPL-3.0-or-later.
+
+`npm run build` regenerates `js/THIRD-PARTY-LICENSES.txt` as a postbuild step. The `js/*.license`
+sidecars the bundler emits carry only SPDX identifiers, and that is not enough on its own:
+BSD-2-Clause (epub.js) requires a binary redistribution to reproduce the conditions and the
+disclaimer, and Apache-2.0 (localforage) requires a copy of the licence. That file carries the texts.
+
+Two things it works around, both verified rather than assumed:
+
+- The sidecars **under-report**. pako's code is in a chunk — its inflate error strings are there —
+  but it appears in no sidecar, because jszip pulls it in and only the direct import was credited. So
+  the package set comes from `npm ls --omit=dev --all`, unioned with the sidecars.
+- The lock file's `dev` flags cannot substitute for that: they mark only packages reachable
+  *exclusively* from devDependencies, which leaves 419 of 636 entries unflagged.
+
+Output is grouped by identical licence text and sorted, so a rebuild of an unchanged tree produces a
+byte-identical file and CI's bundle check stays meaningful.
+
 ## Building a release
 
 ```bash

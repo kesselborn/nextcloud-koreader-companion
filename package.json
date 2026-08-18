@@ -11,7 +11,8 @@
     "dev": "vite build --mode development",
     "watch": "vite build --mode development --watch",
     "lint": "eslint src",
-    "lint:fix": "eslint src --fix"
+    "lint:fix": "eslint src --fix",
+    "postbuild": "node dev/collect-licenses.mjs"
   },
   "dependencies": {
     "@nextcloud/axios": "^2.6.0",
