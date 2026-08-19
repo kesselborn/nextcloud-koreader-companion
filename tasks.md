@@ -743,16 +743,26 @@ feat/nextcloud-34 line was only ever pushed to the fork.
 - [x] 15.4 `actions/checkout` v4 → v7 (SHA-pinned in release.yml at
       `3d3c42e5…` = v7.0.1, floating in ci.yml): kills the node-20-forced-to-
       node-24 deprecation warnings
-- [~] 15.5 **Integration job "Boot the stack" — open.** Failed 3/3 runs,
-      deterministically, in ~1.0 min on both the 8090 and 8080 port layouts.
-      That duration rules out the installer wait alone (provision polls
-      `occ status` for up to 300 s before giving up), so `docker compose up
-      -d --wait --build` dies early: pull rate-limit, build error, or a
-      container crash — not separable from job metadata alone. The failure
-      step now dumps `compose ps -a` + all service logs; **next step: read
-      them from the next fork run and pin the cause.** Local reproduction is
-      clean (same flow boots green in the dev sandbox), so it is
-      runner-specific
-- [ ] 15.6 After 15.5: the fixes need a fork push + run to prove — the
-      composer fix (15.1) is locally verified, the workflow changes are
-      YAML-validated only. Runs on push of `main`
+- [x] 15.5 **Integration job "Boot the stack" — cause confirmed from a real
+      fork run, not guessed.** The user's own CI output named it:
+      `container koreader-companion-cron-1 has no healthcheck configured` —
+      newer compose (the CI runners) refuses `up --wait` outright when *any*
+      service has no healthcheck, and cron's was `disable: true`. That is why
+      it failed in ~1.0 min flat on every run: too fast for the installer
+      wait, too deterministic for a pull/build flake. Fixed in
+      `f64a7964`: the loop itself is now the liveness signal — each tick
+      touches a heartbeat file, and the healthcheck fails once two ticks are
+      missed. Verified locally: cron reaches `healthy`, and the exact CI
+      boot command (`docker compose up -d --wait`) exits 0 with all three
+      services healthy
+- [x] 15.6 **Dependency audit — cause also confirmed from the real run.**
+      `composer audit --no-dev` with no prior `composer install`: "No
+      installed packages found. Please run composer install ... or pass
+      --locked". The job never installs dependencies at all, so a plain
+      audit can't run — `--locked` audits the committed lock instead, which
+      is the stronger CI statement anyway (checks exactly what a release
+      ships). Verified locally: `composer audit --no-dev --locked` → no
+      advisories, exit 0
+- [ ] 15.7 Both real-run failures (15.5, 15.6) are now fixed and locally
+      verified; 15.1–15.4 remain YAML-/dry-run-verified only. Needs a fork
+      push + fresh run to confirm all of Phase 15 green end to end
