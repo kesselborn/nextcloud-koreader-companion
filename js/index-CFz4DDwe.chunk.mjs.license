@@ -16,7 +16,7 @@ SPDX-FileCopyrightText: fchasen@gmail.com
 
 This file is generated from multiple sources. Included packages:
 - @xmldom/xmldom
-	- version: 0.7.13
+	- version: 0.8.14
 	- license: MIT
 - d
 	- version: 1.0.2

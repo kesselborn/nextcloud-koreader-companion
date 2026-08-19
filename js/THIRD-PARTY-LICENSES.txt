@@ -2959,7 +2959,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-  @xmldom/xmldom 0.7.13 -- MIT
+  @xmldom/xmldom 0.8.14 -- MIT
 ==============================================================================
 
 Copyright 2019 - present Christopher J. Brody and other contributors, as listed in: https://github.com/xmldom/xmldom/graphs/contributors
