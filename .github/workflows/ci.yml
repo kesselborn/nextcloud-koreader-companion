@@ -84,7 +84,7 @@ jobs:
       - name: composer audit
         run: composer audit --no-dev --locked
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -111,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Matches NC 34's own engines field.
           node-version: '24'
