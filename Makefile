@@ -17,7 +17,10 @@ app_name     = koreader_companion
 app_version  = $(shell sed -n 's:.*<version>\(.*\)</version>.*:\1:p' appinfo/info.xml)
 build_dir    = $(CURDIR)/build
 appstore_dir = $(build_dir)/artifacts/appstore
-tarball      = $(appstore_dir)/$(app_name).tar.gz
+# Versioned, so a downloaded artifact is identifiable without opening it and
+# builds of different releases can sit side by side. The directory inside the
+# tarball stays plain $(app_name) -- that is what occ and the app store expect.
+tarball      = $(appstore_dir)/$(app_name)-$(app_version).tar.gz
 source_dir   = $(build_dir)/artifacts/source
 cert_dir     = $(HOME)/.nextcloud/certificates
 
@@ -249,7 +252,7 @@ release: release-checks appstore release-verify ## Build a verified, installable
 	@echo "    $(tarball)"
 	@echo
 	@echo "  Install it on the server (as the web server user):"
-	@echo "    tar -xzf $(app_name).tar.gz -C /path/to/nextcloud/custom_apps/"
+	@echo "    tar -xzf $(notdir $(tarball)) -C /path/to/nextcloud/custom_apps/"
 	@echo "    occ app:enable $(app_name)   # first install only"
 	@echo "    occ upgrade                      # after a version bump"
 	@echo

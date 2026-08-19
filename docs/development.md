@@ -162,7 +162,7 @@ byte-identical file and CI's bundle check stays meaningful.
 ## Building a release
 
 ```bash
-make release        # -> build/artifacts/appstore/koreader_companion.tar.gz
+make release        # -> build/artifacts/appstore/koreader_companion-<version>.tar.gz
 ```
 
 `make release` builds the frontend, installs PHP dependencies without the dev ones, packs the
