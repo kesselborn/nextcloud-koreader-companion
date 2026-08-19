@@ -25,7 +25,7 @@ jobs:
         # container actually runs.
         php: ['8.2', '8.3', '8.4', '8.5']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -48,7 +48,7 @@ jobs:
     name: Psalm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -67,7 +67,7 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # These parse untrusted files in-process: smalot/pdfparser reads uploaded
       # PDFs, kiwilan/php-archive shells out to unrar, and epubjs unpacks EPUBs in
@@ -94,7 +94,7 @@ jobs:
     name: info.xml schema
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate against the published app store schema
         run: |
           sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libxml2-utils
@@ -105,7 +105,7 @@ jobs:
     name: Frontend build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -140,7 +140,7 @@ jobs:
     name: OPDS + KOReader against Nextcloud 34
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Boot the stack
         run: |
@@ -153,6 +153,15 @@ jobs:
       - name: KOReader sync suite
         run: ./test_scripts/test_koreader.sh --base-url http://localhost:8080 --password test123
 
-      - name: Server log on failure
+      # The boot step has failed deterministically and early (~1 min, three
+      # runs, both port layouts), which rules out the installer wait -- but
+      # the app-only tail never showed why. Dump the full picture instead:
+      # every container's state and every service's log.
+      - name: Boot diagnostics on failure
         if: failure()
-        run: docker compose logs app | tail -200
+        run: |
+          docker compose ps -a
+          for svc in $(docker compose config --services); do
+            echo "=== logs: $svc ==="
+            docker compose logs --tail 100 "$svc" || true
+          done
