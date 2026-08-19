@@ -108,9 +108,17 @@ class SettingsController extends Controller {
         if ($isFolderChanging) {
             $cleared = $this->clearLibraryMetadata($userId);
 
-            // The reconciliation walk is throttled, so without this the new
-            // folder would look empty until the interval elapsed.
-            $this->config->setValueString($userId, $this->appName, 'last_reconcile', '0');
+            // Register the new folder's books right here, in this request.
+            // The reconciliation walk otherwise runs only on a full page
+            // load (PageController::index), and the app is a SPA: after the
+            // initial load it only ever refetches over AJAX, so without this
+            // the library stays empty until the user thinks of pressing F5.
+            // Forced like the batch rename: a settings write may look at the
+            // filesystem now, not at whatever the throttled walk last saw.
+            // Extraction stays off this path -- rows land pending, and the
+            // library's pending poll and "extract now" button finish them.
+            $this->bookService->ensureMetadataUpToDate($userId, true);
+
             return new JSONResponse([
                 'folder_changed' => true,
                 'cleared' => $cleared,
