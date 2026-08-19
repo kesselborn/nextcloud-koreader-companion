@@ -18,6 +18,11 @@
             "OCA\\KoreaderCompanion\\": "lib/"
         }
     },
+    "config": {
+        "platform": {
+            "php": "8.2.99"
+        }
+    },
     "require-dev": {
         "vimeo/psalm": "^6.16",
         "symfony/console": "~6.4.41",
