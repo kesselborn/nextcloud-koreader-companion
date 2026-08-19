@@ -48,7 +48,7 @@
 </template>
 
 <script>
-import { getFilePickerBuilder, showError, showSuccess } from '@nextcloud/dialogs'
+import { FilePickerClosed, getFilePickerBuilder, showError, showSuccess } from '@nextcloud/dialogs'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -106,11 +106,26 @@ export default {
 
 	methods: {
 		async pickFolder() {
-			// Replaces OC.dialogs.filepicker, deprecated since 27.1.
+			// Replaces OC.dialogs.filepicker, deprecated since 27.1. The
+			// confirm button is load-bearing: dialogs renders no default
+			// action, so without addButton the picker can only be cancelled
+			// -- pick() then rejects and the folder is never set.
+			//
+			// No MIME filter: a books folder holds files, not subfolders, so
+			// a directory-only mask renders the target as an empty list
+			// ("No files here" -- the files are there, just hidden). canPick
+			// shows them but keeps them unpickable instead.
 			const picker = getFilePickerBuilder(t('koreader_companion', 'Choose your eBooks folder'))
-				.addMimeTypeFilter('httpd/unix-directory')
 				.allowDirectories(true)
 				.setMultiSelect(false)
+				.setCanPick((node) => node.type === 'folder')
+				.addButton({
+					label: t('koreader_companion', 'Choose'),
+					variant: 'primary',
+					// The library closes the dialog with the selected nodes
+					// after the callback; picking needs no extra work here.
+					callback: () => {},
+				})
 				.build()
 
 			try {
@@ -124,8 +139,8 @@ export default {
 				this.folder = folder
 				showSuccess(result?.message || t('koreader_companion', 'Folder updated'))
 			} catch (error) {
-				// The picker rejects on cancel; that is not worth a toast.
-				if (error) {
+				// Cancel rejects with FilePickerClosed; not worth a toast.
+				if (!(error instanceof FilePickerClosed)) {
 					showError(t('koreader_companion', 'Could not change the folder'))
 				}
 			}
