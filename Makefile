@@ -72,7 +72,14 @@ dev: $(if $(filter-out 0,$(GUTENBERG)),gutenberg-fetch) up composer provision ##
 	@echo
 
 up: ## Start the stack and wait until it is healthy
-	$(DC) up -d --wait --build
+	# cron deliberately has no healthcheck (see compose.yaml) and --wait
+	# cannot be pointed at a service with one disabled on some compose
+	# versions -- so wait on the two services that actually have one, then
+	# start cron separately. `up` without --wait still starts it as a normal
+	# dependent service and blocks on `depends_on: app: condition:
+	# service_healthy` first.
+	$(DC) up -d --wait --build app db
+	$(DC) up -d cron
 
 down: ## Stop the stack (keeps volumes)
 	$(DC) down

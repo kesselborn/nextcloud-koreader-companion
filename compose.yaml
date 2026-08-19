@@ -110,18 +110,24 @@ services:
       <<: *nextcloud-env
       POSTGRES_HOST: db
     # Inherited from the anchor, but this container runs no web server, so the
-    # status.php probe would mark it permanently unhealthy. A plain disable no
-    # longer works either: newer compose (as on the CI runners) refuses
-    # `up --wait` outright when a service has no healthcheck ("container ...
-    # has no healthcheck configured"), which is what failed the integration
-    # job in ~1 minute on every run. Liveness here is the loop itself: every
-    # tick touches a heartbeat file, and two missed ticks fail the check.
+    # status.php probe would mark it permanently unhealthy, and there is no
+    # equivalent signal worth checking: the loop's only job is to shell out to
+    # cron.php every 30s, which either works or it does not, with no state in
+    # between that a healthcheck could usefully observe.
+    #
+    # disable: true is correct here, but do not also point `up --wait` at this
+    # service (see `up`/CI's boot step) -- a `healthcheck.disable: true`
+    # service makes `--wait` fail outright with "container ... has no
+    # healthcheck configured" on some compose versions (confirmed CI
+    # regression; open upstream bug docker/compose#13522). A synthetic
+    # heartbeat healthcheck was tried and reverted: it exists only to satisfy
+    # --wait, adds nothing anyone reads, and on a slower runner than this
+    # container was tuned against it flaked "unhealthy" for real -- solving
+    # the wrong problem. dev/seed.sh already drains the queue directly via
+    # `php -f cron.php`, so nothing here is actually waiting on this
+    # container's health; it just should not be *asked* to have any.
     healthcheck:
-      test: ["CMD-SHELL", "test -n \"$$(find /tmp/koreader-cron-heartbeat -newermt '-65 seconds' 2>/dev/null)\""]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      disable: true
     # Overriding the entrypoint skips the image's privilege drop, so without this
     # the loop runs as root and every tick dies with "Console has to be executed
     # with the user that owns the file config/config.php" (uid 0 vs 33).
@@ -134,7 +140,6 @@ services:
       - |
         while true; do
           php -f /var/www/html/cron.php >/dev/null 2>&1 || true
-          touch /tmp/koreader-cron-heartbeat
           sleep 30
         done
     volumes:

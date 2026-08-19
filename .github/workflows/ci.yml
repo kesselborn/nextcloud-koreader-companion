@@ -146,9 +146,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # cron has no healthcheck by design (see compose.yaml) -- some compose
+      # versions fail --wait outright when it is pointed at a service with
+      # healthcheck.disable: true (docker/compose#13522), which is what
+      # actually failed this step, not a slow boot. Wait on app/db, which do
+      # have one, then start cron as a plain dependent service.
       - name: Boot the stack
         run: |
-          docker compose up -d --wait --build
+          docker compose up -d --wait --build app db
+          docker compose up -d cron
           ./dev/provision.sh
 
       - name: OPDS suite
