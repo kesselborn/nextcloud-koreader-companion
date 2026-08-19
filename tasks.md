@@ -743,18 +743,25 @@ feat/nextcloud-34 line was only ever pushed to the fork.
 - [x] 15.4 `actions/checkout` v4 → v7 (SHA-pinned in release.yml at
       `3d3c42e5…` = v7.0.1, floating in ci.yml): kills the node-20-forced-to-
       node-24 deprecation warnings
-- [x] 15.5 **Integration job "Boot the stack" — cause confirmed from a real
-      fork run, not guessed.** The user's own CI output named it:
-      `container koreader-companion-cron-1 has no healthcheck configured` —
-      newer compose (the CI runners) refuses `up --wait` outright when *any*
-      service has no healthcheck, and cron's was `disable: true`. That is why
-      it failed in ~1.0 min flat on every run: too fast for the installer
-      wait, too deterministic for a pull/build flake. Fixed in
-      `f64a7964`: the loop itself is now the liveness signal — each tick
-      touches a heartbeat file, and the healthcheck fails once two ticks are
-      missed. Verified locally: cron reaches `healthy`, and the exact CI
-      boot command (`docker compose up -d --wait`) exits 0 with all three
-      services healthy
+- [x] 15.5 **Integration job "Boot the stack" — root cause confirmed, twice.**
+      Round 1 (from the user's pasted CI output): `container
+      koreader-companion-cron-1 has no healthcheck configured`. First fix
+      (`f64a7964`) gave cron a synthetic heartbeat healthcheck so `--wait`
+      would stop complaining. Round 2 (from a later real run): that
+      healthcheck itself then flaked `cron-1 is unhealthy` on the slower
+      runner. The user pushed back on the premise — *does a cron sidecar need
+      a healthcheck at all?* — which led to the real fix instead of a second
+      patch on the first one: `healthcheck.disable: true` (correct — cron has
+      no liveness signal worth checking) is what a confirmed, still-open
+      upstream bug (docker/compose#13522) makes `--wait` treat as "no
+      healthcheck" and refuse outright, version-dependent. `dev/seed.sh`
+      already drains the queue directly via `php -f cron.php`, so nothing
+      needs cron's health observed in the first place. Fix: `--wait` now
+      targets only `app db` (the services that legitimately have a
+      healthcheck); cron starts after as a plain dependent service via a
+      second `up -d cron`. The heartbeat healthcheck is gone entirely.
+      Verified on a full volume reset: app+db healthy, cron starts clean,
+      provisioning completes, 34/34 OPDS + 17/17 KOReader, exit 0
 - [x] 15.6 **Dependency audit — cause also confirmed from the real run.**
       `composer audit --no-dev` with no prior `composer install`: "No
       installed packages found. Please run composer install ... or pass
@@ -763,6 +770,18 @@ feat/nextcloud-34 line was only ever pushed to the fork.
       is the stronger CI statement anyway (checks exactly what a release
       ships). Verified locally: `composer audit --no-dev --locked` → no
       advisories, exit 0
-- [ ] 15.7 Both real-run failures (15.5, 15.6) are now fixed and locally
-      verified; 15.1–15.4 remain YAML-/dry-run-verified only. Needs a fork
+- [x] 15.8 **npm audit — found on a later real run, after 15.1-15.6 were
+      pushed.** 5 high-severity advisories against every `@xmldom/xmldom`
+      release up to 0.8.12 (XML/CDATA/DOCTYPE/comment injection,
+      uncontrolled recursion); epubjs declares `^0.7.5`, capping below all of
+      them, and `npm audit fix` only offers `epubjs@0.4.2` — a breaking bump,
+      not something to force in CI. epubjs only reaches for xmldom as a
+      browser-DOMParser fallback (never exercised in an actual browser), but
+      it still ships in the bundle and EPUB content is attacker-controlled in
+      this app's threat model regardless. Same shape as the composer platform
+      pin (15.1): `package.json` `overrides` pins `@xmldom/xmldom` to 0.8.14
+      (closest patched release) without forcing epubjs's own major bump.
+      Verified: `npm audit --audit-level=high --omit=dev` → 0 vulnerabilities,
+      build and l10n check both clean
+- [ ] 15.9 15.1–15.6 and 15.8 are now fixed and locally verified. Needs a fork
       push + fresh run to confirm all of Phase 15 green end to end
