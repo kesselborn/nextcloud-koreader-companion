@@ -1,0 +1,462 @@
+<title>KOReader Companion — how this app is actually tested</title>
+<style>
+  :root {
+    --ground:  #eaeff3;
+    --paper:   #ffffff;
+    --sunk:    #dfe6ec;
+    --ink:     #0d161c;
+    --ink-2:   #3a4c57;
+    --ink-3:   #6d808c;
+    --line:    #ccd8e0;
+    --line-2:  #e2eaef;
+    --accent:  #0082c9;
+    --accent-2:#005c8f;
+    --crit:    #b52a45;
+    --crit-bg: #fbe9ec;
+    --warn:    #96600a;
+    --warn-bg: #fbf1de;
+    --ok:      #136b56;
+    --ok-bg:   #e3f3ee;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0a1116; --paper: #121c23; --sunk: #0e171d;
+      --ink: #e7eef3; --ink-2: #a3b5c0; --ink-3: #71858f;
+      --line: #24333c; --line-2: #1b272e;
+      --accent: #3fabe8; --accent-2: #7ac6f2;
+      --crit: #f2798d; --crit-bg: #2d1620;
+      --warn: #dda63f; --warn-bg: #2a2013;
+      --ok: #48c8a0; --ok-bg: #10251f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0a1116; --paper: #121c23; --sunk: #0e171d;
+    --ink: #e7eef3; --ink-2: #a3b5c0; --ink-3: #71858f;
+    --line: #24333c; --line-2: #1b272e;
+    --accent: #3fabe8; --accent-2: #7ac6f2;
+    --crit: #f2798d; --crit-bg: #2d1620;
+    --warn: #dda63f; --warn-bg: #2a2013;
+    --ok: #48c8a0; --ok-bg: #10251f;
+  }
+  :root[data-theme="light"] {
+    --ground: #eaeff3; --paper: #ffffff; --sunk: #dfe6ec;
+    --ink: #0d161c; --ink-2: #3a4c57; --ink-3: #6d808c;
+    --line: #ccd8e0; --line-2: #e2eaef;
+    --accent: #0082c9; --accent-2: #005c8f;
+    --crit: #b52a45; --crit-bg: #fbe9ec;
+    --warn: #96600a; --warn-bg: #fbf1de;
+    --ok: #136b56; --ok-bg: #e3f3ee;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.mast { padding: 72px 0 40px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 20px;
+  }
+  h1 {
+    font-size: clamp(2rem, 5.2vw, 3.3rem); line-height: 1.05; margin: 0 0 20px;
+    font-weight: 700; letter-spacing: -.025em; text-wrap: balance; max-width: 26ch;
+  }
+  .standfirst { font-size: clamp(1.05rem, 2vw, 1.22rem); color: var(--ink-2); margin: 0; max-width: 66ch; }
+  .standfirst strong { color: var(--ink); font-weight: 650; }
+
+  .verdict {
+    display: flex; flex-wrap: wrap; gap: 0; margin: 40px 0 0;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px; overflow: hidden;
+  }
+  .verdict > div { flex: 1 1 150px; padding: 18px 20px; border-right: 1px solid var(--line-2); }
+  .verdict > div:last-child { border-right: 0; }
+  .verdict dt {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 8px;
+  }
+  .verdict dd {
+    margin: 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .verdict dd small { display: block; font-family: var(--sans); font-size: .78rem; font-weight: 400; color: var(--ink-3); letter-spacing: 0; margin-top: 4px; }
+  .n-crit { color: var(--crit); } .n-warn { color: var(--warn); } .n-ok { color: var(--ok); }
+
+  section { padding: 64px 0 0; }
+  h2 {
+    font-size: clamp(1.35rem, 2.6vw, 1.75rem); font-weight: 650; letter-spacing: -.02em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .sec-head { border-top: 1px solid var(--line); padding-top: 18px; margin-bottom: 28px; }
+  .sec-head .eyebrow { margin-bottom: 14px; }
+  .sec-head p { margin: 10px 0 0; color: var(--ink-2); max-width: 68ch; }
+  h3 { font-size: 1.02rem; font-weight: 650; margin: 34px 0 12px; letter-spacing: -.01em; }
+  p.body { color: var(--ink-2); max-width: 68ch; }
+  ul.body, ol.body { color: var(--ink-2); max-width: 68ch; padding-left: 1.3em; }
+  ul.body li, ol.body li { margin: 0 0 8px; }
+  ul.body li::marker { color: var(--ink-3); }
+
+  code, .m { font-family: var(--mono); font-size: .855em; }
+  code {
+    background: var(--sunk); padding: .12em .38em; border-radius: 3px;
+    border: 1px solid var(--line-2); white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .scroller { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: .89rem; }
+  caption { text-align: left; padding: 16px 20px 0; color: var(--ink-3); font-size: .82rem; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 500; border-bottom: 1px solid var(--line); white-space: nowrap;
+    background: var(--paper);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td .m { color: var(--ink-3); font-size: .8rem; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono);
+    font-size: .72rem; letter-spacing: .04em; padding: 3px 9px; border-radius: 99px;
+    border: 1px solid var(--line-2); white-space: nowrap;
+  }
+  .pill.ok   { color: var(--ok);   background: var(--ok-bg);   border-color: transparent; }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+  .pill.crit { color: var(--crit); background: var(--crit-bg); border-color: transparent; }
+  .pill.none { color: var(--ink-3); background: var(--sunk); }
+
+  pre {
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 3px;
+    padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: .82rem;
+    line-height: 1.65; margin: 14px 0;
+  }
+  pre .c { color: var(--ink-3); }
+  pre .g { color: var(--ok); }
+  pre .r { color: var(--crit); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 20px 0; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 3px; padding: 18px 20px; }
+  .card h4 {
+    margin: 0 0 8px; font-size: .92rem; font-weight: 650; display: flex; align-items: center; gap: 8px;
+  }
+  .card p { margin: 0; color: var(--ink-2); font-size: .88rem; }
+
+  .gap {
+    border-left: 3px solid var(--warn); background: var(--warn-bg); border-radius: 0 3px 3px 0;
+    padding: 12px 16px; margin: 14px 0; color: var(--ink);
+  }
+  .gap strong { color: var(--warn); }
+  .catch {
+    border-left: 3px solid var(--ok); background: var(--ok-bg); border-radius: 0 3px 3px 0;
+    padding: 12px 16px; margin: 14px 0; color: var(--ink);
+  }
+  .catch strong { color: var(--ok); }
+
+  footer { border-top: 1px solid var(--line); margin-top: 80px; padding: 28px 0 0; color: var(--ink-3); font-size: .84rem; }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">KOReader Companion — testing</p>
+  <h1>How this app is actually tested</h1>
+  <p class="standfirst">
+    Short version: <strong>there is no PHPUnit and no frontend test framework.</strong>
+    Correctness is checked by static analysis, four PHP-version lints, a supply-chain audit —
+    and, doing the real work, two hand-written Bash scripts that boot a genuine Nextcloud 34
+    container and hit its live HTTP API with <code>curl</code>. What follows is what each of
+    those actually does, why the frontend has no component tests at all, and where the honest
+    gaps are.
+  </p>
+  <dl class="verdict">
+    <div>
+      <dt>PHP unit tests</dt>
+      <dd class="n-crit">0<small>PHPUnit ships in composer.lock, unused</small></dd>
+    </div>
+    <div>
+      <dt>Frontend tests</dt>
+      <dd class="n-crit">0<small>no Vitest/Jest/Cypress/Playwright</small></dd>
+    </div>
+    <div>
+      <dt>Integration checks</dt>
+      <dd class="n-ok">51<small>34 OPDS + 17 KOReader, over real HTTP</small></dd>
+    </div>
+    <div>
+      <dt>Static analysis</dt>
+      <dd>Psalm<small>baselined, level 4</small></dd>
+    </div>
+  </dl>
+</header>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">The direct answer</p>
+    <h2>Frontend tests, or just the API?</h2>
+    <p>Just the API — and not even that through a framework.</p>
+  </div>
+  <ul class="body">
+    <li><strong>No frontend test exists.</strong> No Vitest, Jest, Cypress, Playwright, or
+      Testing Library anywhere in <code>package.json</code>. Not one Vue component
+      (<code>LibraryView</code>, <code>SettingsView</code>, <code>ReaderModal</code>, …) has
+      ever been rendered or asserted on outside a real browser.</li>
+    <li><strong><code>npm run lint</code> exists but cannot run.</strong> It calls
+      <code>eslint src</code>, but ESLint has no config file in this repo and is not even a
+      direct <code>devDependency</code> — it is a transitive leftover pulled in by something
+      else. Running it locally fails immediately with <em>"ESLint couldn't find a configuration
+      file."</em> It is also never invoked in CI. Not a gap that is merely unwired — the script
+      is dead weight.</li>
+    <li><strong>What does exist is black-box HTTP testing against a real server.</strong> Two
+      Bash scripts drive a genuinely running Nextcloud 34 + PostgreSQL stack over
+      <code>curl</code> and check status codes, headers, and response bodies — the same way a
+      real OPDS reader or a real KOReader device would. That is the entire correctness net for
+      both the PHP backend <em>and</em> the parts of the frontend that talk to it (nothing
+      checks the Vue rendering itself, only the API it calls).</li>
+    <li><strong>Everything else is a gate, not a test</strong> in the sense of asserting
+      behaviour: syntax lint, static analysis, dependency audits, a schema check, and a
+      committed-bundle freshness check. Real and useful, but none of them execute the
+      application's logic.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">The map</p>
+    <h2>Six CI jobs, one real test suite</h2>
+    <p>Every push to <code>main</code> and every pull request runs
+      <a href="../.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a>. Five of
+      the six jobs are gates; only <code>integration</code> executes the application.</p>
+  </div>
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr><th>Job</th><th>What it runs</th><th>What it actually checks</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>php-lint</code><br><span class="m">×4, matrix</span></td>
+          <td><code>php -l</code> over <code>lib/</code> and <code>templates/</code>, on PHP
+            8.2 – 8.5; <code>composer validate --strict</code>; a plain
+            <code>composer install</code></td>
+          <td>Syntax errors, and — because <code>php -l</code> has to compile a file's
+            declarations to check it — compile-time deprecations too. This is how an implicitly
+            nullable parameter (silently fine on 8.2–8.3) was caught before PHP 8.4 started
+            warning on it.</td>
+        </tr>
+        <tr>
+          <td><code>static-analysis</code></td>
+          <td><code>psalm --output-format=github</code></td>
+          <td>Type and logic issues, at <code>errorLevel="4"</code>, against a committed
+            baseline (<code>tests/psalm-baseline.xml</code>). The existing findings are
+            grandfathered in; the baseline is not allowed to <em>grow</em>, so a genuinely new
+            issue still fails the build.</td>
+        </tr>
+        <tr>
+          <td><code>audit</code></td>
+          <td><code>composer audit --no-dev --locked</code>;<br><code>npm audit
+            --audit-level=high --omit=dev</code></td>
+          <td>Known-vulnerability advisories in the dependency tree — high severity and above
+            only, so a low-severity finding in some dev-only transitive package cannot wedge
+            every PR. See the box below for what this job has actually caught.</td>
+        </tr>
+        <tr>
+          <td><code>info-xml</code></td>
+          <td><code>xmllint</code> against the published app store XSD</td>
+          <td>That <code>appinfo/info.xml</code> is a manifest the Nextcloud app store will
+            actually accept.</td>
+        </tr>
+        <tr>
+          <td><code>frontend</code></td>
+          <td><code>npm run build</code>; an l10n sync check; a
+            "committed bundle matches a fresh build" diff</td>
+          <td>That the Vue app <em>compiles</em>, that every <code>t()</code>/<code>n()</code>
+            call has a translation entry, and that nobody forgot to rebuild
+            <code>js/</code>/<code>css/</code> before committing. None of this renders a
+            component or asserts on its output.</td>
+        </tr>
+        <tr>
+          <td><code>integration</code></td>
+          <td>see below</td>
+          <td>The only job that runs the actual application.</td>
+        </tr>
+      </tbody>
+      <caption>Source: <code>.github/workflows/ci.yml</code>. Local equivalents:
+        <code>make test</code> runs just the integration suites; the others have no single
+        Makefile target and are meant to be read from the workflow file.</caption>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">The real test suite</p>
+    <h2>How the integration job actually works</h2>
+    <p>No test framework, no mocks, no fixtures database. A real container, real HTTP, real
+      assertions on what comes back.</p>
+  </div>
+  <ol class="body">
+    <li><strong>Boot a real stack.</strong>
+      <code>docker compose up -d --wait --build app db</code> starts Nextcloud 34.0.2 on Apache
+      against PostgreSQL 17, and waits for both to report healthy. A third container, the cron
+      sidecar, starts after — it is not required for the tests to run, since seeding drains the
+      job queue itself (see below), and it deliberately carries no healthcheck of its own.</li>
+    <li><strong>Provision it.</strong> <code>dev/provision.sh</code> waits for the Nextcloud
+      installer to finish, applies dev-only config, enables the app, sets up the admin user and
+      the KOReader sync password, and uploads a handful of sample books over WebDAV — deliberate,
+      since metadata extraction hangs off a real <code>NodeCreatedEvent</code>, which copying
+      files into the data directory would never fire. It then drains the background job queue
+      directly (<code>php -f cron.php</code>) so the books carry real extracted titles and
+      authors by the time the suites run, rather than the placeholder filename a fresh upload
+      starts with.</li>
+    <li><strong>Run two Bash scripts against it.</strong>
+      <code>test_scripts/test_opds.sh</code> and <code>test_scripts/test_koreader.sh</code>,
+      both plain <code>#!/bin/bash</code> with no framework underneath — a handful of shared
+      shell functions or nothing at all. Each one authenticates the way a real client of that
+      protocol would (HTTP Basic for OPDS, an MD5 header pair for KOReader sync) and asserts on
+      the actual response: HTTP status code first, then content — an OPDS feed is parsed just
+      enough to pull out one tag and confirm it is well-formed XML with the right
+      <code>profile=opds-catalog</code> content type; a KOReader sync response is checked against
+      the exact JSON shape the reference <code>kosync</code> server produces.</li>
+  </ol>
+
+  <div class="cards">
+    <div class="card">
+      <h4><span class="pill ok">OPDS</span> test_opds.sh</h4>
+      <p><strong>34/34 passed</strong> on the run that produced this page. Ten sections:
+        authentication, core feeds, faceted browsing (author/series/genre/format/language),
+        content-type validation, error handling, the auth handshake, input validation,
+        book-specific endpoints, and category browsing by a real author found in the seeded
+        library.</p>
+    </div>
+    <div class="card">
+      <h4><span class="pill ok">KOReader</span> test_koreader.sh</h4>
+      <p><strong>17/17 passed</strong> on the same run. Seven sections: health check,
+        authentication, the reading-progress API, error handling, real-device value edge cases
+        (full float precision, long device names — added after those exact values once broke
+        production), and content-type checks.</p>
+    </div>
+  </div>
+
+  <h3>What one check actually looks like</h3>
+  <p class="body">There is no assertion library. A helper wraps <code>curl</code>, a status code
+    is compared with a plain <code>[[ ]]</code>, and the result is printed with a colored
+    glyph:</p>
+  <pre><span class="c"># abridged from test_scripts/test_opds.sh</span>
+opds_request() {
+  curl -s -u "$USERNAME:$PASSWORD" \
+       -H "Accept: application/atom+xml;profile=opds-catalog" \
+       "$OPDS_BASE_URL$2"
+}
+
+status=$(opds_request GET /authors -o /dev/null -w '%{http_code}')
+if [[ "$status" == "200" ]]; then
+  print_result "PASS" "Browse by Author"
+<span class="g">  <span class="c">→</span> ✓ Browse by Author</span>
+else
+  print_result "FAIL" "Browse by Author" "HTTP $status"
+<span class="r">  <span class="c">→</span> ✗ Browse by Author  HTTP $status</span>
+fi</pre>
+
+  <h3>Run it yourself</h3>
+  <pre><span class="c">make dev</span>                                       <span class="c"># boot, provision, seed — see docs/development.md</span>
+<span class="c">make test</span>                                      <span class="c"># both suites against the local stack</span>
+<span class="c">./test_scripts/test_opds.sh --verbose</span>
+<span class="c">./test_scripts/test_koreader.sh --verbose --password test123</span></pre>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">The other three gates</p>
+    <h2>Static analysis, lint, and supply chain</h2>
+  </div>
+
+  <h3>Psalm — the closest thing to a unit test</h3>
+  <p class="body">Level 4 across <code>lib/</code>, with <code>findUnusedCode="false"</code> and
+    a checked-in baseline. It reasons about types and reachability without running any code, so
+    it catches a class of bug the integration suite structurally cannot: a wrong type flowing
+    through a path no test happens to exercise. It cannot catch a wrong <em>value</em> — only Psalm
+    would never have caught the reading-progress column being too narrow for a real device's
+    float precision; the integration suite's real-device-value section exists specifically
+    because static analysis cannot.</p>
+
+  <h3>Four PHP versions, one purpose</h3>
+  <p class="body">8.2 is the floor this app declares support for; 8.5 is what the Nextcloud 34
+    container actually ships. Running <code>php -l</code> across the gap exists to catch exactly
+    what it already has once: code that is silently fine on the floor version and starts
+    deprecating on the newest one, long before an admin's server upgrade turns it into a
+    production warning nobody asked for.</p>
+
+  <h3>Supply chain: two real findings, days apart</h3>
+  <p class="body">This gate is not theoretical — it has already caught two real problems in this
+    project, both from ordinary dependency drift rather than anything introduced on purpose:</p>
+  <div class="catch">
+    <strong>Caught:</strong> <code>composer.lock</code> had pinned <code>sebastian/diff</code>
+    to a version requiring PHP ≥8.4, because the lock had last been resolved on an 8.4+ machine.
+    The 8.2/8.3 lint legs and Psalm died at <code>composer install</code> before ever reaching
+    their actual check. Fixed by pinning <code>config.platform.php</code> to the declared floor
+    and re-resolving, the same idea as <code>npm</code>'s <code>overrides</code> below.
+  </div>
+  <div class="catch">
+    <strong>Caught:</strong> <code>npm audit</code> flagged five high-severity advisories against
+    every <code>@xmldom/xmldom</code> release up to 0.8.12 — a transitive dependency of
+    <code>epubjs</code>, the in-browser EPUB reader, which only reaches for it as a fallback when
+    a browser has no native <code>DOMParser</code> (never true in this app's actual runtime, but
+    the code still ships in the bundle, and EPUB files are attacker-controlled input by this
+    project's own threat model). <code>npm audit fix</code> only offered a breaking major bump of
+    <code>epubjs</code> itself; a <code>package.json</code> <code>overrides</code> entry pinned
+    just the vulnerable transitive dependency to a patched release instead.
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <p class="eyebrow">Being honest about it</p>
+    <h2>What is not tested</h2>
+    <p>None of this is hidden — it follows directly from what is listed above not existing.</p>
+  </div>
+  <div class="gap">
+    <strong>No PHP unit tests.</strong> <code>phpunit/phpunit</code> is in
+    <code>composer.lock</code> only as a transitive dependency of Psalm's own toolchain — it is
+    never invoked, there is no <code>phpunit.xml</code>, and nothing under <code>lib/</code> has
+    ever been exercised in isolation. Every backend behaviour that is checked at all is checked
+    through the integration suites, over real HTTP, against the whole stack — never a single
+    class or method on its own.
+  </div>
+  <div class="gap">
+    <strong>No frontend tests of any kind.</strong> No Vue component has been mounted and
+    asserted on outside a real browser; the historical record for frontend correctness in this
+    project is manual — entries like "verified: real Chrome session, zero console errors" in the
+    project's own task log, not an automated run anyone can repeat.
+  </div>
+  <div class="gap">
+    <strong><code>npm run lint</code> is not merely unwired, it is broken.</strong> No ESLint
+    config exists in this repository, and ESLint is not a direct dependency — running the script
+    fails immediately with "couldn't find a configuration file."
+  </div>
+  <div class="gap">
+    <strong>No browser-driven end-to-end test.</strong> Nothing automates opening the app,
+    clicking through the settings folder picker, uploading a book, or opening the reader. All of
+    that is integration-tested only insofar as the HTTP endpoints it calls are.
+  </div>
+  <div class="gap">
+    <strong>Narrower gaps worth naming:</strong> CBR (RAR comic) cover extraction has never been
+    exercised end-to-end for lack of a real fixture; performance numbers quoted in the project's
+    own history are one-off manual measurements, not a benchmark that runs in CI; and the
+    reading-position round trip against real KOReader hardware — as opposed to Readest and other
+    EPUB readers used during development — remains unconfirmed.
+  </div>
+</section>
+
+<footer>
+  Reflects the CI configuration and test scripts in this repository as of this writing.
+  See <a href="development.md">development.md</a> for how to run the dev stack this all depends
+  on, and <a href="../.github/workflows/ci.yml">ci.yml</a> for the exact, current job definitions.
+</footer>
+
+</div>

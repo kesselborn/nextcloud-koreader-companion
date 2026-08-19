@@ -178,6 +178,7 @@ Worth knowing before you go looking for a fault:
 ## More
 
 - [Development](docs/development.md) — local Docker stack, tests, translations, releases
+- [Testing](docs/testing.html) — what actually gets tested, how, and what does not
 - [Security notes](docs/security-audit.html) — what was reviewed before running this on a public instance
 - [How KOReader stores annotations](docs/koreader-sidecar.md) — the file format, and why this works
 
