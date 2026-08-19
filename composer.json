@@ -19,6 +19,9 @@
         }
     },
     "require-dev": {
-        "vimeo/psalm": "^6.16"
+        "vimeo/psalm": "^6.16",
+        "symfony/console": "~6.4.41",
+        "symfony/filesystem": "~7.4.8",
+        "symfony/string": "~7.4.13"
     }
 }

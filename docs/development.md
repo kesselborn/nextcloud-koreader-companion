@@ -10,7 +10,7 @@ make dev      # boot Nextcloud 34 + PostgreSQL, install deps, provision, seed sa
 make help     # list every target
 ```
 
-Then open <http://localhost:8090> and log in as `admin` / `admin`. The app is at
+Then open <http://localhost:8080> and log in as `admin` / `admin`. The app is at
 `/apps/koreader_companion/`, the OPDS feed at `/apps/koreader_companion/opds`, and the KOReader sync
 password is `test123`.
 

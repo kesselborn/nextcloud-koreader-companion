@@ -148,10 +148,10 @@ jobs:
           ./dev/provision.sh
 
       - name: OPDS suite
-        run: ./test_scripts/test_opds.sh --base-url http://localhost:8090
+        run: ./test_scripts/test_opds.sh --base-url http://localhost:8080
 
       - name: KOReader sync suite
-        run: ./test_scripts/test_koreader.sh --base-url http://localhost:8090 --password test123
+        run: ./test_scripts/test_koreader.sh --base-url http://localhost:8080 --password test123
 
       - name: Server log on failure
         if: failure()

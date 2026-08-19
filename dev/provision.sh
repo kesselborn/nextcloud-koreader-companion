@@ -15,7 +15,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 APP_ID="${APP_ID:-koreader_companion}"
 SERVICE="${SERVICE:-app}"
-BASE_URL="${BASE_URL:-http://localhost:8090}"
+BASE_URL="${BASE_URL:-http://localhost:8080}"
 NC_USER="${NC_USER:-admin}"
 NC_PASS="${NC_PASS:-admin}"
 EBOOKS_FOLDER="${EBOOKS_FOLDER:-eBooks}"

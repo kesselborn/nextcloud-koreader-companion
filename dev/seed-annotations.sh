@@ -9,7 +9,7 @@
 #
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8090}"
+BASE_URL="${BASE_URL:-http://localhost:8080}"
 USER="${NC_USER:-admin}"
 PASS="${NC_PASS:-admin}"
 LIBRARY="${LIBRARY:-eBooks}"

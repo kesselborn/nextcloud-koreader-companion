@@ -74,13 +74,13 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "${APP_PORT:-8090}:80"
+      - "${APP_PORT:-8080}:80"
     environment:
       <<: *nextcloud-env
       POSTGRES_HOST: db
       NEXTCLOUD_TRUSTED_DOMAINS: "localhost 127.0.0.1 host.docker.internal app"
-      OVERWRITEHOST: "localhost:${APP_PORT:-8090}"
-      OVERWRITECLIURL: "http://localhost:${APP_PORT:-8090}"
+      OVERWRITEHOST: "localhost:${APP_PORT:-8080}"
+      OVERWRITECLIURL: "http://localhost:${APP_PORT:-8080}"
     volumes:
       - nextcloud_html:/var/www/html
       # Live reload: edits to lib/, templates/, js/, css/ take effect on the

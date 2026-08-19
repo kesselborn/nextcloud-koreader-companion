@@ -28,7 +28,7 @@ UID_GID        = $(shell id -u):$(shell id -g)
 
 # Overridable: make test KOREADER_PASSWORD=hunter2
 KOREADER_PASSWORD ?= test123
-APP_PORT          ?= 8090
+APP_PORT          ?= 8080
 APP31_PORT        ?= 8091
 APPMYSQL_PORT     ?= 8092
 BASE_URL          ?= http://localhost:$(APP_PORT)
