@@ -715,3 +715,44 @@ Researched, not yet built. Format notes: `docs/koreader-sidecar.md`.
       through feeds and a NAT'd household shares one IP, so a limit sized wrong breaks real devices
 - [ ] 14.6 `batchRename` still renames synchronously in-request with a 0.5 s sleep per chunk (H1c);
       rate-limited to 2 per 5 min, job move still owed. Same as 8.2c
+
+## Phase 15 — CI recovery (2026-08-19)
+
+Every run on the `kesselborn` fork red (anonymous API view works:
+`api.github.com/repos/<owner>/<repo>/actions/...`; `gh` has no credentials
+inside the sandbox and the log endpoint 403s anonymously — job steps,
+conclusions, durations and annotations are visible, raw logs are not).
+Upstream `international-omelette` has no recent runs at all — the
+feat/nextcloud-34 line was only ever pushed to the fork.
+
+- [x] 15.1 **PHP 8.2/8.3 lint, Psalm and the audit never got past
+      `composer install`.** `sebastian/diff` was locked at 8.3.0
+      (`php >=8.4`); psalm accepts `^4–^8`, so the lock was simply resolved
+      on an 8.4+ host. `config.platform.php` now pins 8.2.99 — the app's
+      declared floor — and diff re-resolved to 6.0.2. Verified with
+      `composer install --dry-run` under the pinned platform, which checks
+      the whole lock, not just the one package
+- [x] 15.2 **The release workflow referenced a tarball name that stopped
+      existing.** Tarballs carry the version since the 1.5.2 Makefile change;
+      release.yml hardcoded `koreader_companion.tar.gz`. It now reads the
+      version from `appinfo/info.xml` with the same sed the Makefile uses
+- [x] 15.3 **Appstore upload can never succeed on a fork** — no
+      `APPSTORE_TOKEN`/`APP_PRIVATE_KEY` there, which is what failed the
+      1.5.1 release run. The appstore leg is now gated on the credentials
+      being present (GitHub release asset still uploads everywhere)
+- [x] 15.4 `actions/checkout` v4 → v7 (SHA-pinned in release.yml at
+      `3d3c42e5…` = v7.0.1, floating in ci.yml): kills the node-20-forced-to-
+      node-24 deprecation warnings
+- [~] 15.5 **Integration job "Boot the stack" — open.** Failed 3/3 runs,
+      deterministically, in ~1.0 min on both the 8090 and 8080 port layouts.
+      That duration rules out the installer wait alone (provision polls
+      `occ status` for up to 300 s before giving up), so `docker compose up
+      -d --wait --build` dies early: pull rate-limit, build error, or a
+      container crash — not separable from job metadata alone. The failure
+      step now dumps `compose ps -a` + all service logs; **next step: read
+      them from the next fork run and pin the cause.** Local reproduction is
+      clean (same flow boots green in the dev sandbox), so it is
+      runner-specific
+- [ ] 15.6 After 15.5: the fixes need a fork push + run to prove — the
+      composer fix (15.1) is locally verified, the workflow changes are
+      YAML-validated only. Runs on push of `main`
