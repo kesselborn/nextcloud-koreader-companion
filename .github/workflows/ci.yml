@@ -77,8 +77,12 @@ jobs:
           php-version: '8.3'
           coverage: none
 
+      # --locked: this job never runs composer install, and without vendor/
+      # an install-less audit refuses to run at all ("No installed packages
+      # found"). Auditing the committed lock is also the stronger statement
+      # for CI -- it checks exactly what a release would ship.
       - name: composer audit
-        run: composer audit --no-dev
+        run: composer audit --no-dev --locked
 
       - uses: actions/setup-node@v4
         with:
