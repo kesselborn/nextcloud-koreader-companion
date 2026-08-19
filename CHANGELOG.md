@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-08-19
+
+### Fixed
+- **Changing the eBooks folder finally works.** The picker in the app's settings
+  opened without a confirm button, so a choice could never be committed and the
+  folder was never changed; cancelling the dialog also produced a spurious
+  error toast. The dialog now has a *Choose* action, closing it counts as a
+  cancel, and book files are visible while browsing (though not pickable), so a
+  library folder full of books no longer renders as an empty "No files here"
+  list
+- **A changed library folder is indexed immediately.** The scan that registers
+  the new folder's books only ran on a full page load, so the single-page app
+  kept showing an empty library until the browser was reloaded. The folder
+  change now runs the scan itself: books appear right away and their metadata
+  fills in as extraction completes
+
 ## [1.5.1] - 2026-08-18
 
 Everything user-visible here is a fix to 1.5.0, which was never released.
