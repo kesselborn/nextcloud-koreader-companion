@@ -44,6 +44,20 @@ uploads them over **WebDAV**. That is deliberate: metadata extraction hangs off 
 would leave the metadata table empty. Drop your own `.epub` / `.pdf` / `.cbr` / `.cbz` files into
 `dev/fixtures/` and they will be uploaded too.
 
+### Real books from Project Gutenberg
+
+`make dev` fetches twenty curated public-domain EPUBs (`.epub.images`, so the covers travel with
+them) from [gutenberg.org](https://www.gutenberg.org) into `dev/fixtures/` before provisioning, so
+the stack comes up with real books instead of generated ones — sixteen English, two German, one
+Spanish, one French, to give the OPDS language facets something to slice. `make dev GUTENBERG=0`
+opts out (offline work falls back to the generated fixtures); `make seed-gutenberg` fetches and
+seeds an already-running stack.
+
+Downloads are cached — files already in `dev/fixtures/` are kept — so re-runs are cheap and work
+offline. The list is `id|slug` pairs at the top of `dev/fetch-gutenberg.sh`; adding a book is one
+line. `make dev` is a human-only entry point: CI provisions via `dev/provision.sh` directly and
+never touches the network for fixtures.
+
 The listener only records the book and queues the extraction, so `make seed` drains the job queue
 before printing its summary. The stack also runs a `cron` sidecar that ticks every 30 seconds, which
 is what processes anything you add afterwards. To drain it yourself:

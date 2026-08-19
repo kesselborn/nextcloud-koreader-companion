@@ -4,6 +4,8 @@
 #   make dev                  boot, install deps, provision, seed sample books
 #   make up / down / logs / shell / reset
 #   make occ ARGS="app:list"
+#   make seed-gutenberg       fetch real public-domain EPUBs (Project Gutenberg) and seed them
+#                             (make dev does this automatically; GUTENBERG=0 opts out)
 #   make test
 #
 # Release:
@@ -36,6 +38,7 @@ BASE_URL          ?= http://localhost:$(APP_PORT)
 .DEFAULT_GOAL := help
 
 .PHONY: help dev up down logs occ cron shell shell-www reset seed provision test \
+        gutenberg-fetch seed-gutenberg \
         composer install clean appstore sign release nc31-up nc31-down nc31-provision \
         seed-annotations release-checks release-verify \
         mysql-up mysql-down mysql-provision npm-install frontend watch l10n
@@ -47,7 +50,14 @@ help: ## Show this help
 
 # ---------------------------------------------------------------- development
 
-dev: up composer provision ## Boot, install deps, provision and seed (start here)
+# Real books from Project Gutenberg are part of every boot: fetched before
+# provisioning, cached in dev/fixtures/. Opt out with GUTENBERG=0 (offline
+# work falls back to the generated fixtures). filter-out rather than $(if):
+# GUTENBERG=0 is a non-empty string and would count as "on". CI never runs
+# `make dev` -- it calls dev/provision.sh directly -- so gutenberg.org never
+# becomes a CI dependency.
+GUTENBERG ?= 1
+dev: $(if $(filter-out 0,$(GUTENBERG)),gutenberg-fetch) up composer provision ## Boot, install deps, provision and seed (start here)
 	@echo
 	@echo "  Nextcloud 34    $(BASE_URL)   (admin / admin)"
 	@echo "  App             $(BASE_URL)/apps/$(app_name)/"
@@ -84,6 +94,12 @@ provision: ## Configure Nextcloud for dev, enable the app, seed sample books
 	./dev/provision.sh
 
 seed: ## Generate sample books and upload them via WebDAV
+	./dev/seed.sh
+
+gutenberg-fetch: ## Download public-domain EPUBs from Project Gutenberg into dev/fixtures/
+	./dev/fetch-gutenberg.sh
+
+seed-gutenberg: gutenberg-fetch ## Fetch Project Gutenberg EPUBs and upload them
 	./dev/seed.sh
 
 # The pointers are generated against the actual EPUB, so they resolve and the
